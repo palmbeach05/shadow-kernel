@@ -48,8 +48,6 @@ Module.symvers
 # Generated include files
 #
 include/asm
-include/asm-*/asm-offsets.h
-include/asm-arm/mach-types.h
 include/config
 include/linux/autoconf.h
 include/linux/version.h
