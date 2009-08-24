@@ -60,8 +60,8 @@ enum s390_regset {
 	REGSET_GENERAL_EXTENDED,
 };
 
-DEFINE_TRACE(syscall_enter);
-DEFINE_TRACE(syscall_exit);
+DEFINE_TRACE_FN(syscall_enter, syscall_regfunc, syscall_unregfunc);
+DEFINE_TRACE_FN(syscall_exit, syscall_regfunc, syscall_unregfunc);
 
 static void
 FixPerRegisters(struct task_struct *task)
