@@ -22,7 +22,6 @@
 #include <linux/seccomp.h>
 #include <linux/signal.h>
 #include <linux/workqueue.h>
-#include <trace/syscall.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -65,9 +64,6 @@ enum x86_regset {
 				  X86_EFLAGS_SF | X86_EFLAGS_TF |	\
 				  X86_EFLAGS_DF | X86_EFLAGS_OF |	\
 				  X86_EFLAGS_RF | X86_EFLAGS_AC))
-
-DEFINE_TRACE_FN(syscall_enter, syscall_regfunc, syscall_unregfunc);
-DEFINE_TRACE_FN(syscall_exit, syscall_regfunc, syscall_unregfunc);
 
 /*
  * Determines whether a value may be installed in a segment register.

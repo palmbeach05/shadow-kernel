@@ -37,7 +37,6 @@
 #include <linux/tracehook.h>
 #include <linux/seccomp.h>
 #include <linux/compat.h>
-#include <trace/syscall.h>
 #include <asm/segment.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -59,9 +58,6 @@ enum s390_regset {
 	REGSET_FP,
 	REGSET_GENERAL_EXTENDED,
 };
-
-DEFINE_TRACE_FN(syscall_enter, syscall_regfunc, syscall_unregfunc);
-DEFINE_TRACE_FN(syscall_exit, syscall_regfunc, syscall_unregfunc);
 
 static void
 FixPerRegisters(struct task_struct *task)
