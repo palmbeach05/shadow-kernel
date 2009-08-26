@@ -590,4 +590,21 @@ bool kvm_vcpu_compatible(struct kvm_vcpu *vcpu);
 static inline bool kvm_vcpu_compatible(struct kvm_vcpu *vcpu) { return true; }
 
 #endif
+
+#ifdef __KVM_HAVE_DEVICE_ASSIGNMENT
+
+long kvm_vm_ioctl_assigned_device(struct kvm *kvm, unsigned ioctl,
+				  unsigned long arg);
+
+#else
+
+static inline long kvm_vm_ioctl_assigned_device(struct kvm *kvm, unsigned ioctl,
+						unsigned long arg)
+{
+	return -ENOTTY;
+}
+
 #endif
+
+#endif
+
