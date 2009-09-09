@@ -11,6 +11,7 @@
 #include <linux/ftrace.h>
 #include <trace/boot.h>
 #include <linux/kmemtrace.h>
+#include <linux/hw_breakpoint.h>
 
 #include <linux/trace_seq.h>
 #include <linux/ftrace_event.h>

@@ -11,6 +11,7 @@
 #include <linux/random.h>
 #include <linux/user-return-notifier.h>
 #include <trace/events/power.h>
+#include <linux/hw_breakpoint.h>
 #include <asm/system.h>
 #include <asm/apic.h>
 #include <asm/syscalls.h>
@@ -18,6 +19,7 @@
 #include <asm/uaccess.h>
 #include <asm/i387.h>
 #include <asm/ds.h>
+#include <asm/debugreg.h>
 
 unsigned long idle_halt;
 EXPORT_SYMBOL(idle_halt);
@@ -93,13 +95,7 @@ void flush_thread(void)
 	struct task_struct *tsk = current;
 
 	clear_tsk_thread_flag(tsk, TIF_DEBUG);
-
-	tsk->thread.debugreg[0] = 0;
-	tsk->thread.debugreg[1] = 0;
-	tsk->thread.debugreg[2] = 0;
-	tsk->thread.debugreg[3] = 0;
-	tsk->thread.debugreg6 = 0;
-	tsk->thread.debugreg7 = 0;
+	flush_ptrace_hw_breakpoint(tsk);
 	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
 	/*
 	 * Forget coprocessor state..
