@@ -828,7 +828,7 @@ static void svm_vcpu_put(struct kvm_vcpu *vcpu)
 	for (i = 0; i < NR_HOST_SAVE_USER_MSRS; i++)
 		wrmsrl(host_save_user_msrs[i], svm->host_user_msrs[i]);
 
-	rdtscll(vcpu->arch.host_tsc);
+	vcpu->arch.host_tsc = native_read_tsc();
 }
 
 static unsigned long svm_get_rflags(struct kvm_vcpu *vcpu)
