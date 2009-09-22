@@ -157,6 +157,8 @@ extern int no_unaligned_warning;
 extern int unaligned_dump_stack;
 #endif
 
+extern struct ratelimit_state printk_ratelimit_state;
+
 #ifdef CONFIG_RT_MUTEXES
 extern int max_lock_depth;
 #endif

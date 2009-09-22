@@ -36,6 +36,7 @@
 #include <trace/kernel.h>
 #include <linux/syslog.h>
 #include <linux/kmsg_dump.h>
+#include <linux/ratelimit.h>
 
 #include <asm/uaccess.h>
 
