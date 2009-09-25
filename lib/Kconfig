@@ -214,4 +214,7 @@ config NLATTR
 config GENERIC_ATOMIC64
        bool
 
+config LRU_CACHE
+	tristate
+
 endmenu
