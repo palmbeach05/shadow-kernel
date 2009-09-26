@@ -51,3 +51,5 @@
 #endif
 
 #endif
+
+#define __compiletime_object_size(obj) __builtin_object_size(obj, 0)
