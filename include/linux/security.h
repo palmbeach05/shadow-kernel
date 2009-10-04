@@ -467,6 +467,10 @@ static inline void security_free_mnt_opts(struct security_mnt_opts *opts)
  *	@uid contains new owner's ID.
  *	@gid contains new group's ID.
  *	Return 0 if permission is granted.
+ * @path_chroot:
+ *	Check for permission to change root directory.
+ *	@path contains the path structure.
+ *	Return 0 if permission is granted.
  * @inode_readlink:
  *	Check the permission to read the symbolic link.
  *	@dentry contains the dentry structure for the file link.
@@ -1517,6 +1521,7 @@ struct security_operations {
 	int (*path_chmod) (struct dentry *dentry, struct vfsmount *mnt,
 			   mode_t mode);
 	int (*path_chown) (struct path *path, uid_t uid, gid_t gid);
+	int (*path_chroot) (struct path *path);
 #endif
 
 	int (*inode_alloc_security) (struct inode *inode);
@@ -3009,6 +3014,7 @@ int security_path_rename(struct path *old_dir, struct dentry *old_dentry,
 int security_path_chmod(struct dentry *dentry, struct vfsmount *mnt,
 			mode_t mode);
 int security_path_chown(struct path *path, uid_t uid, gid_t gid);
+int security_path_chroot(struct path *path);
 #else	/* CONFIG_SECURITY_PATH */
 static inline int security_path_unlink(struct path *dir, struct dentry *dentry)
 {
@@ -3067,6 +3073,11 @@ static inline int security_path_chmod(struct dentry *dentry,
 }
 
 static inline int security_path_chown(struct path *path, uid_t uid, gid_t gid)
+{
+	return 0;
+}
+
+static inline int security_path_chroot(struct path *path)
 {
 	return 0;
 }
