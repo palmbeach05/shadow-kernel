@@ -29,7 +29,7 @@
  * pq_scribble_page - space to hold throwaway P or Q buffer for
  * synchronous gen_syndrome
  */
-static struct page *pq_scribble_page;
+static struct page *scribble;
 
 /* the struct page *blocks[] parameter passed to async_gen_syndrome()
  * and async_syndrome_val() contains the 'P' destination address at
@@ -308,14 +308,12 @@ async_syndrome_val(struct page **blocks, unsigned int offset, int disks,
 
 		if (submit->flags & ASYNC_TX_FENCE)
 			dma_flags |= DMA_PREP_FENCE;
-		for (i = 0; i < disks-2; i++)
-			if (likely(blocks[i])) {
-				dma_src[src_cnt] = dma_map_page(dev, blocks[i],
-								offset, len,
-								DMA_TO_DEVICE);
-				coefs[src_cnt] = raid6_gfexp[i];
-				src_cnt++;
-			}
+
+		for (i = 0; i < disks; i++)
+			if (likely(blocks[i]))
+				dma_src[i] = dma_map_page(dev, blocks[i],
+							  offset, len,
+							  DMA_TO_DEVICE);
 
 		for (;;) {
 			tx = device->device_prep_dma_pq_val(chan, pq, dma_src,
