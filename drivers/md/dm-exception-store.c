@@ -233,7 +233,7 @@ int dm_exception_store_create(struct dm_target *ti, int argc, char **argv,
 
 	r = set_chunk_size(tmp_store, argv[1], &ti->error);
 	if (r)
-		goto bad;
+		goto bad_ctr;
 
 	r = type->ctr(tmp_store, 0, NULL);
 	if (r) {
