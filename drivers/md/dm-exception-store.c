@@ -156,6 +156,12 @@ static int set_chunk_size(struct dm_exception_store *store,
 		return 0;
 	}
 
+	/*
+	 * Chunk size must be multiple of page size.  Silently
+	 * round up if it's not.
+	 */
+	chunk_size_ulong = round_up(chunk_size_ulong, PAGE_SIZE >> 9);
+
 	return dm_exception_store_set_chunk_size(store,
 						 (unsigned) chunk_size_ulong,
 						 error);
@@ -172,8 +178,7 @@ int dm_exception_store_set_chunk_size(struct dm_exception_store *store,
 	}
 
 	/* Validate the chunk size against the device block size */
-	if (chunk_size %
-	    (bdev_logical_block_size(dm_snap_cow(store->snap)->bdev) >> 9)) {
+	if (chunk_size % (bdev_logical_block_size(store->cow->bdev) >> 9)) {
 		*error = "Chunk size is not a multiple of device blocksize";
 		return -EINVAL;
 	}

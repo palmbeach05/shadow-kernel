@@ -1459,6 +1459,9 @@ static int origin_map(struct dm_target *ti, struct bio *bio,
 static void origin_resume(struct dm_target *ti)
 {
 	struct dm_dev *dev = ti->private;
+	struct dm_snapshot *snap;
+	struct origin *o;
+	unsigned chunk_size = 0;
 
 	down_read(&_origins_lock);
 
