@@ -156,12 +156,6 @@ static int set_chunk_size(struct dm_exception_store *store,
 		return 0;
 	}
 
-	/*
-	 * Chunk size must be multiple of page size.  Silently
-	 * round up if it's not.
-	 */
-	chunk_size_ulong = round_up(chunk_size_ulong, PAGE_SIZE >> 9);
-
 	return dm_exception_store_set_chunk_size(store,
 						 (unsigned) chunk_size_ulong,
 						 error);
