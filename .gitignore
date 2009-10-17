@@ -48,7 +48,6 @@ Module.symvers
 # Generated include files
 #
 include/config
-include/linux/autoconf.h
 include/linux/version.h
 include/linux/utsrelease.h
 include/generated
