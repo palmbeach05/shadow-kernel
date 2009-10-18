@@ -546,6 +546,8 @@ struct perf_pending_entry {
 	void (*func)(struct perf_pending_entry *);
 };
 
+typedef void (*perf_callback_t)(struct perf_event *, void *);
+
 /**
  * struct perf_event - performance event kernel representation:
  */
@@ -640,6 +642,8 @@ struct perf_event {
 #ifdef CONFIG_EVENT_PROFILE
 	struct event_filter		*filter;
 #endif
+
+	perf_callback_t			callback;
 
 #endif /* CONFIG_PERF_EVENTS */
 };
@@ -750,7 +754,8 @@ extern int perf_event_release_kernel(struct perf_event *event);
 extern struct perf_event *
 perf_event_create_kernel_counter(struct perf_event_attr *attr,
 				int cpu,
-				pid_t pid);
+				pid_t pid,
+				perf_callback_t callback);
 extern u64 perf_event_read_value(struct perf_event *event);
 
 struct perf_sample_data {
