@@ -80,8 +80,8 @@ static int input_open_polled_device(struct input_dev *input)
 	if (error)
 		return error;
 
-	if (dev->flush)
-		dev->flush(dev);
+	if (dev->open)
+		dev->open(dev);
 
 	queue_delayed_work(polldev_wq, &dev->work,
 			   msecs_to_jiffies(dev->poll_interval));
@@ -101,6 +101,9 @@ static void input_close_polled_device(struct input_dev *input)
 	 */
 	INIT_DELAYED_WORK(&dev->work, dev->work.work.func);
 	input_polldev_stop_workqueue();
+
+	if (dev->close)
+		dev->close(dev);
 }
 
 /**
