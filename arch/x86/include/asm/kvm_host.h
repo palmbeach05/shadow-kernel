@@ -356,7 +356,6 @@ struct kvm_vcpu_arch {
 	unsigned int time_offset;
 	struct page *time_page;
 
-	bool singlestep; /* guest is single stepped by KVM */
 	u64 last_guest_tsc;
 	u64 last_kernel_ns;
 
