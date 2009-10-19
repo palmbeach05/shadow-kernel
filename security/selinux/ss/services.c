@@ -982,7 +982,8 @@ allow:
 	avd->auditdeny = 0xffffffff;
 	avd->seqno = latest_granting;
 	avd->flags = 0;
-	return 0;
+	rc = 0;
+	goto out;
 }
 
 /*
