@@ -65,6 +65,7 @@ aicdb.h*
 asm-offsets.h
 asm_offsets.h
 autoconf.h*
+av_permissions.h
 bbootsect
 bin2c
 binkernel.spec
@@ -94,6 +95,7 @@ docproc
 elf2ecoff
 elfconfig.h*
 fixdep
+flask.h
 fore200e_mkfirm
 fore200e_pca_fw.c*
 gconf
