@@ -194,9 +194,6 @@ static struct list_head ptype_all __read_mostly;	/* Taps */
 DEFINE_RWLOCK(dev_base_lock);
 EXPORT_SYMBOL(dev_base_lock);
 
-#define NETDEV_HASHBITS	8
-#define NETDEV_HASHENTRIES (1 << NETDEV_HASHBITS)
-
 DEFINE_TRACE(net_dev_xmit);
 DEFINE_TRACE(net_dev_receive);
 DEFINE_TRACE(net_napi_schedule);
@@ -207,12 +204,12 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(net_napi_complete);
 static inline struct hlist_head *dev_name_hash(struct net *net, const char *name)
 {
 	unsigned hash = full_name_hash(name, strnlen(name, IFNAMSIZ));
-	return &net->dev_name_head[hash & ((1 << NETDEV_HASHBITS) - 1)];
+	return &net->dev_name_head[hash & (NETDEV_HASHENTRIES - 1)];
 }
 
 static inline struct hlist_head *dev_index_hash(struct net *net, int ifindex)
 {
-	return &net->dev_index_head[ifindex & ((1 << NETDEV_HASHBITS) - 1)];
+	return &net->dev_index_head[ifindex & (NETDEV_HASHENTRIES - 1)];
 }
 
 /* Device list insertion */
