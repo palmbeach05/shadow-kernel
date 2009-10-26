@@ -51,6 +51,8 @@
 
 /* Data structures. */
 
+static struct lock_class_key rcu_root_class;
+
 #define RCU_STATE_INITIALIZER(name) { \
 	.level = { &name.node[0] }, \
 	.levelcnt = { \
