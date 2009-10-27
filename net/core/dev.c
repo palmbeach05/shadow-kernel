@@ -5671,7 +5671,7 @@ restart:
 
 		/* Delete virtual devices */
 		if (dev->rtnl_link_ops && dev->rtnl_link_ops->dellink) {
-			dev->rtnl_link_ops->dellink(dev);
+			dev->rtnl_link_ops->dellink(dev, NULL);
 			goto restart;
 		}
 
