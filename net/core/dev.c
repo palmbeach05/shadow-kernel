@@ -2503,7 +2503,7 @@ void napi_gro_flush(struct napi_struct *napi)
 }
 EXPORT_SYMBOL(napi_gro_flush);
 
-int dev_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
+enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
 	struct sk_buff **pp = NULL;
 	struct packet_type *ptype;
@@ -2511,7 +2511,7 @@ int dev_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 	struct list_head *head = &ptype_base[ntohs(type) & PTYPE_HASH_MASK];
 	int same_flow;
 	int mac_len;
-	int ret;
+	enum gro_result ret;
 
 	if (!(skb->dev->features & NETIF_F_GRO))
 		goto normal;
@@ -2595,7 +2595,8 @@ normal:
 }
 EXPORT_SYMBOL(dev_gro_receive);
 
-static int __napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
+static gro_result_t
+__napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
 	struct sk_buff *p;
 
@@ -2612,7 +2613,7 @@ static int __napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 	return dev_gro_receive(napi, skb);
 }
 
-int napi_skb_finish(int ret, struct sk_buff *skb)
+int napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 {
 	int err = NET_RX_SUCCESS;
 
@@ -2626,6 +2627,10 @@ int napi_skb_finish(int ret, struct sk_buff *skb)
 
 	case GRO_MERGED_FREE:
 		kfree_skb(skb);
+		break;
+
+	case GRO_HELD:
+	case GRO_MERGED:
 		break;
 	}
 
@@ -2689,7 +2694,8 @@ out:
 }
 EXPORT_SYMBOL(napi_get_frags);
 
-int napi_frags_finish(struct napi_struct *napi, struct sk_buff *skb, int ret)
+int napi_frags_finish(struct napi_struct *napi, struct sk_buff *skb,
+		      gro_result_t ret)
 {
 	int err = NET_RX_SUCCESS;
 
@@ -2710,6 +2716,9 @@ int napi_frags_finish(struct napi_struct *napi, struct sk_buff *skb, int ret)
 
 	case GRO_MERGED_FREE:
 		napi_reuse_skb(napi, skb);
+		break;
+
+	case GRO_MERGED:
 		break;
 	}
 
