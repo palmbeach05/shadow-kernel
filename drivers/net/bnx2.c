@@ -1469,6 +1469,8 @@ bnx2_enable_forced_2g5(struct bnx2 *bp)
 	} else if (CHIP_NUM(bp) == CHIP_NUM_5708) {
 		bnx2_read_phy(bp, bp->mii_bmcr, &bmcr);
 		bmcr |= BCM5708S_BMCR_FORCE_2500;
+	} else {
+		return;
 	}
 
 	if (bp->autoneg & AUTONEG_SPEED) {
@@ -1503,6 +1505,8 @@ bnx2_disable_forced_2g5(struct bnx2 *bp)
 	} else if (CHIP_NUM(bp) == CHIP_NUM_5708) {
 		bnx2_read_phy(bp, bp->mii_bmcr, &bmcr);
 		bmcr &= ~BCM5708S_BMCR_FORCE_2500;
+	} else {
+		return;
 	}
 
 	if (bp->autoneg & AUTONEG_SPEED)
