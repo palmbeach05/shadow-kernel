@@ -2428,7 +2428,7 @@ cfq_should_preempt(struct cfq_data *cfqd, struct cfq_queue *new_cfqq,
 	 * if this request is as-good as one we would expect from the
 	 * current cfqq, let it preempt
 	 */
-	if (cfq_rq_close(cfqd, rq) && (!cfq_cfqq_coop(new_cfqq) ||
+	if (cfq_rq_close(cfqd, cfqq, rq) && (!cfq_cfqq_coop(new_cfqq) ||
 	    cfqd->busy_queues == 1)) {
 		/*
 		 * Mark new queue coop_preempt, so its coop flag will not be
