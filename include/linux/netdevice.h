@@ -1088,6 +1088,8 @@ extern rwlock_t				dev_base_lock;		/* Device list lock */
 		list_for_each_entry(d, &(net)->dev_base_head, dev_list)
 #define for_each_netdev_reverse(net, d)	\
 		list_for_each_entry_reverse(d, &(net)->dev_base_head, dev_list)
+#define for_each_netdev_rcu(net, d)		\
+		list_for_each_entry_rcu(d, &(net)->dev_base_head, dev_list)
 #define for_each_netdev_safe(net, d, n)	\
 		list_for_each_entry_safe(d, n, &(net)->dev_base_head, dev_list)
 #define for_each_netdev_continue(net, d)		\

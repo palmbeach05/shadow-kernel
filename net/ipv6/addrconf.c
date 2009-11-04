@@ -482,9 +482,8 @@ static void addrconf_forward_change(struct net *net, __s32 newf)
 	struct net_device *dev;
 	struct inet6_dev *idev;
 
-	read_lock(&dev_base_lock);
-	for_each_netdev(net, dev) {
-		rcu_read_lock();
+	rcu_read_lock();
+	for_each_netdev_rcu(net, dev) {
 		idev = __in6_dev_get(dev);
 		if (idev) {
 			int changed = (!idev->cnf.forwarding) ^ (!newf);
@@ -492,9 +491,8 @@ static void addrconf_forward_change(struct net *net, __s32 newf)
 			if (changed)
 				dev_forward_change(idev);
 		}
-		rcu_read_unlock();
 	}
-	read_unlock(&dev_base_lock);
+	rcu_read_unlock();
 }
 
 static int addrconf_fixup_forwarding(struct ctl_table *table, int *p, int old)
@@ -1141,10 +1139,9 @@ int ipv6_dev_get_saddr(struct net *net, struct net_device *dst_dev,
 	hiscore->rule = -1;
 	hiscore->ifa = NULL;
 
-	read_lock(&dev_base_lock);
 	rcu_read_lock();
 
-	for_each_netdev(net, dev) {
+	for_each_netdev_rcu(net, dev) {
 		struct inet6_dev *idev;
 
 		/* Candidate Source Address (section 4)
@@ -1239,7 +1236,6 @@ try_nextdev:
 		read_unlock_bh(&idev->lock);
 	}
 	rcu_read_unlock();
-	read_unlock(&dev_base_lock);
 
 	if (!hiscore->ifa)
 		return -EADDRNOTAVAIL;
@@ -4093,9 +4089,8 @@ static void addrconf_disable_change(struct net *net, __s32 newf)
 	struct net_device *dev;
 	struct inet6_dev *idev;
 
-	read_lock(&dev_base_lock);
-	for_each_netdev(net, dev) {
-		rcu_read_lock();
+	rcu_read_lock();
+	for_each_netdev_rcu(net, dev) {
 		idev = __in6_dev_get(dev);
 		if (idev) {
 			int changed = (!idev->cnf.disable_ipv6) ^ (!newf);
@@ -4103,9 +4098,8 @@ static void addrconf_disable_change(struct net *net, __s32 newf)
 			if (changed)
 				dev_disable_change(idev);
 		}
-		rcu_read_unlock();
 	}
-	read_unlock(&dev_base_lock);
+	rcu_read_unlock();
 }
 
 static int addrconf_disable_ipv6(struct ctl_table *table, int *p, int old)
