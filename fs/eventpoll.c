@@ -288,7 +288,7 @@ ctl_table epoll_table[] = {
 		.proc_handler	= &proc_dointvec_minmax,
 		.extra1		= &zero,
 	},
-	{ .ctl_name = 0 }
+	{ }
 };
 #endif /* CONFIG_SYSCTL */
 
