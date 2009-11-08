@@ -99,21 +99,18 @@ int sysfs_setattr(struct dentry * dentry, struct iattr * iattr)
 	/* attributes were changed at least once in past */
 	iattrs = &sd_attrs->ia_iattr;
 
-	if (ia_valid & ATTR_UID)
-		iattrs->ia_uid = iattr->ia_uid;
-	if (ia_valid & ATTR_GID)
-		iattrs->ia_gid = iattr->ia_gid;
-	if (ia_valid & ATTR_ATIME)
-		iattrs->ia_atime = timespec_trunc(iattr->ia_atime,
-			inode->i_sb->s_time_gran);
-	if (ia_valid & ATTR_MTIME)
-		iattrs->ia_mtime = timespec_trunc(iattr->ia_mtime,
-			inode->i_sb->s_time_gran);
-	if (ia_valid & ATTR_CTIME)
-		iattrs->ia_ctime = timespec_trunc(iattr->ia_ctime,
-			inode->i_sb->s_time_gran);
-	if (ia_valid & ATTR_MODE) {
-		umode_t mode = iattr->ia_mode;
+		if (ia_valid & ATTR_UID)
+			iattrs->ia_uid = iattr->ia_uid;
+		if (ia_valid & ATTR_GID)
+			iattrs->ia_gid = iattr->ia_gid;
+		if (ia_valid & ATTR_ATIME)
+			iattrs->ia_atime = iattr->ia_atime;
+		if (ia_valid & ATTR_MTIME)
+			iattrs->ia_mtime = iattr->ia_mtime;
+		if (ia_valid & ATTR_CTIME)
+			iattrs->ia_ctime = iattr->ia_ctime;
+		if (ia_valid & ATTR_MODE) {
+			umode_t mode = iattr->ia_mode;
 
 		if (!in_group_p(inode->i_gid) && !capable(CAP_FSETID))
 			mode &= ~S_ISGID;
