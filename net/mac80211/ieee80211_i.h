@@ -370,15 +370,15 @@ struct ieee80211_if_mesh {
 	/* Synchronization Protocol Identifier */
 	u8 mesh_sp_id[4];
 	/* Authentication Protocol Identifier */
-	u8 mesh_auth_id[4];
-	/* Local mesh Destination Sequence Number */
-	u32 dsn;
+	u8 mesh_auth_id;
+	/* Local mesh Sequence Number */
+	u32 sn;
 	/* Last used PREQ ID */
 	u32 preq_id;
 	atomic_t mpaths;
-	/* Timestamp of last DSN update */
-	unsigned long last_dsn_update;
-	/* Timestamp of last DSN sent */
+	/* Timestamp of last SN update */
+	unsigned long last_sn_update;
+	/* Timestamp of last SN sent */
 	unsigned long last_preq;
 	struct mesh_rmc *rmc;
 	spinlock_t mesh_preq_queue_lock;
