@@ -319,7 +319,7 @@ void tick_nohz_stop_sched_tick(int inidle)
 		if (ratelimit < 10 &&
 		    (local_softirq_pending() & softirq_stop_idle_mask)) {
 			printk(KERN_ERR "NOHZ: local_softirq_pending %02x\n",
-			       local_softirq_pending());
+			       (unsigned int) local_softirq_pending());
 			ratelimit++;
 		}
 		goto end;
