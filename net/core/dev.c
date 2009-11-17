@@ -5092,6 +5092,8 @@ static void netdev_wait_allrefs(struct net_device *dev)
 {
 	unsigned long rebroadcast_time, warning_time;
 
+	linkwatch_forget_dev(dev);
+
 	rebroadcast_time = warning_time = jiffies;
 	while (atomic_read(&dev->refcnt) != 0) {
 		if (time_after(jiffies, rebroadcast_time + 1 * HZ)) {
@@ -5315,6 +5317,7 @@ struct net_device *alloc_netdev_mq(int sizeof_priv, const char *name,
 	netdev_init_queues(dev);
 
 	INIT_LIST_HEAD(&dev->napi_list);
+	INIT_LIST_HEAD(&dev->link_watch_list);
 	dev->priv_flags = IFF_XMIT_DST_RELEASE;
 	setup(dev);
 	strcpy(dev->name, name);
