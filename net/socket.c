@@ -322,18 +322,6 @@ static struct file_system_type sock_fs_type = {
 	.kill_sb =	kill_anon_super,
 };
 
-static int sockfs_delete_dentry(struct dentry *dentry)
-{
-	/*
-	 * At creation time, we pretended this dentry was hashed
-	 * (by clearing DCACHE_UNHASHED bit in d_flags)
-	 * At delete time, we restore the truth : not hashed.
-	 * (so that dput() can proceed correctly)
-	 */
-	dentry->d_flags |= DCACHE_UNHASHED;
-	return 0;
-}
-
 /*
  * sockfs_dname() is called from d_path().
  */
@@ -344,7 +332,6 @@ static char *sockfs_dname(struct dentry *dentry, char *buffer, int buflen)
 }
 
 static const struct dentry_operations sockfs_dentry_operations = {
-	.d_delete = sockfs_delete_dentry,
 	.d_dname  = sockfs_dname,
 };
 
@@ -392,14 +379,19 @@ static int sock_attach_fd(struct socket *sock, struct file *file, int flags)
 	if (unlikely(!dentry))
 		return -ENOMEM;
 
-	dentry->d_op = &sockfs_dentry_operations;
-	/*
-	 * We dont want to push this dentry into global dentry hash table.
-	 * We pretend dentry is already hashed, by unsetting DCACHE_UNHASHED
-	 * This permits a working /proc/$pid/fd/XXX on sockets
-	 */
-	dentry->d_flags &= ~DCACHE_UNHASHED;
-	d_instantiate(dentry, SOCK_INODE(sock));
+	path.dentry->d_op = &sockfs_dentry_operations;
+	d_instantiate(path.dentry, SOCK_INODE(sock));
+	SOCK_INODE(sock)->i_fop = &socket_file_ops;
+
+	file = alloc_file(&path, FMODE_READ | FMODE_WRITE,
+		  &socket_file_ops);
+	if (unlikely(!file)) {
+		/* drop dentry, keep inode */
+		atomic_inc(&path.dentry->d_inode->i_count);
+		path_put(&path);
+		put_unused_fd(fd);
+		return -ENFILE;
+	}
 
 	sock->file = file;
 	init_file(file, sock_mnt, dentry, FMODE_READ | FMODE_WRITE,
