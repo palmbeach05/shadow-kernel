@@ -495,6 +495,7 @@ struct kvm_ioeventfd {
 #ifdef __KVM_HAVE_VCPU_EVENTS
 #define KVM_CAP_VCPU_EVENTS 41
 #endif
+#define KVM_CAP_S390_PSW 42
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
