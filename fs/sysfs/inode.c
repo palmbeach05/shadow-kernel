@@ -81,9 +81,9 @@ int sysfs_sd_setattr(struct sysfs_dirent *sd, struct iattr * iattr)
 		if (!sd_attrs)
 			return -ENOMEM;
 		sd->s_iattr = sd_attrs;
-	}
-	/* attributes were changed at least once in past */
-	iattrs = &sd_attrs->ia_iattr;
+	} else {
+		/* attributes were changed at least once in past */
+		iattrs = &sd_attrs->ia_iattr;
 
 		if (ia_valid & ATTR_UID)
 			iattrs->ia_uid = iattr->ia_uid;
@@ -117,10 +117,6 @@ int sysfs_setattr(struct dentry *dentry, struct iattr *iattr)
 		return error;
 
 	iattr->ia_valid &= ~ATTR_SIZE; /* ignore size changes */
-	if (iattr->ia_valid & ATTR_MODE) {
-		if (!in_group_p(inode->i_gid) && !capable(CAP_FSETID))
-			iattr->ia_mode &= ~S_ISGID;
-	}
 
 	error = inode_setattr(inode, iattr);
 	if (error)
