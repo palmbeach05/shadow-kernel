@@ -103,9 +103,7 @@ do {								\
  */
 struct sysfs_addrm_cxt {
 	struct sysfs_dirent	*parent_sd;
-	struct inode		*parent_inode;
 	struct sysfs_dirent	*removed;
-	int			cnt;
 };
 
 /*
