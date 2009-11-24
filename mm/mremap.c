@@ -313,6 +313,59 @@ Eagain:
 	return ERR_PTR(-EAGAIN);
 }
 
+static unsigned long mremap_to(unsigned long addr,
+	unsigned long old_len, unsigned long new_addr,
+	unsigned long new_len)
+{
+	struct mm_struct *mm = current->mm;
+	struct vm_area_struct *vma;
+	unsigned long ret = -EINVAL;
+	unsigned long charged = 0;
+
+	if (new_addr & ~PAGE_MASK)
+		goto out;
+
+	if (new_len > TASK_SIZE || new_addr > TASK_SIZE - new_len)
+		goto out;
+
+	/* Check if the location we're moving into overlaps the
+	 * old location at all, and fail if it does.
+	 */
+	if ((new_addr <= addr) && (new_addr+new_len) > addr)
+		goto out;
+
+	if ((addr <= new_addr) && (addr+old_len) > new_addr)
+		goto out;
+
+	ret = security_file_mmap(NULL, 0, 0, 0, new_addr, 1);
+	if (ret)
+		goto out;
+
+	ret = do_munmap(mm, new_addr, new_len);
+	if (ret)
+		goto out;
+
+	if (old_len >= new_len) {
+		ret = do_munmap(mm, addr+new_len, old_len - new_len);
+		if (ret && old_len != new_len)
+			goto out;
+		old_len = new_len;
+	}
+
+	vma = vma_to_resize(addr, old_len, new_len, &charged);
+	if (IS_ERR(vma)) {
+		ret = PTR_ERR(vma);
+		goto out;
+	}
+
+	ret = move_vma(vma, addr, old_len, new_len, new_addr);
+	if (ret & ~PAGE_MASK)
+		vm_unacct_memory(charged);
+
+out:
+	return ret;
+}
+
 /*
  * Expand (or shrink) an existing mapping, potentially moving it at the
  * same time (controlled by the MREMAP_MAYMOVE flag and available VM space)
@@ -377,6 +430,9 @@ unsigned long do_mremap(unsigned long addr,
 	/* old_len exactly to the end of the area..
 	 */
 	if (old_len == vma->vm_end - addr) {
+		unsigned long max_addr = TASK_SIZE;
+		if (vma->vm_next)
+			max_addr = vma->vm_next->vm_start;
 		/* can we just expand the current mapping? */
 		if (vma_expandable(vma, new_len - old_len)) {
 			int pages = (new_len - old_len) >> PAGE_SHIFT;
@@ -410,9 +466,7 @@ unsigned long do_mremap(unsigned long addr,
 			map_flags |= MAP_SHARED;
 
 		new_addr = get_unmapped_area(vma->vm_file, 0, new_len,
-					vma->vm_pgoff +
-					((addr - vma->vm_start) >> PAGE_SHIFT),
-					map_flags);
+					vma->vm_pgoff, map_flags);
 		if (new_addr & ~PAGE_MASK) {
 			ret = new_addr;
 			goto out;
