@@ -121,8 +121,6 @@ out_resume:
 	} else
 		xs_suspend_cancel();
 
-	dpm_resume_end(PMSG_RESUME);
-
 	/* Make sure timer events get retriggered on all CPUs */
 	clock_was_set();
 
