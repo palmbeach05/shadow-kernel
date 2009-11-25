@@ -933,7 +933,7 @@ rollback:
 	/* For now only devices in the initial network namespace
 	 * are in sysfs.
 	 */
-	if (net == &init_net) {
+	if (net_eq(net, &init_net)) {
 		ret = device_rename(&dev->dev, dev->name);
 		if (ret) {
 			memcpy(dev->name, oldname, IFNAMSIZ);

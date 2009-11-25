@@ -1026,7 +1026,7 @@ static int atalk_create(struct net *net, struct socket *sock, int protocol)
 	struct sock *sk;
 	int rc = -ESOCKTNOSUPPORT;
 
-	if (net != &init_net)
+	if (!net_eq(net, &init_net))
 		return -EAFNOSUPPORT;
 
 	/*
