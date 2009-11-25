@@ -365,7 +365,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 	if (skb->pkt_type == PACKET_LOOPBACK)
 		goto out;
 
-	if (dev_net(dev) != sock_net(sk))
+	if (!net_eq(dev_net(dev), sock_net(sk)))
 		goto out;
 
 	skb = skb_share_check(skb, GFP_ATOMIC);
@@ -552,7 +552,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	sk = pt->af_packet_priv;
 	po = pkt_sk(sk);
 
-	if (dev_net(dev) != sock_net(sk))
+	if (!net_eq(dev_net(dev), sock_net(sk)))
 		goto drop;
 
 	skb->dev = dev;
@@ -673,7 +673,7 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 	sk = pt->af_packet_priv;
 	po = pkt_sk(sk);
 
-	if (dev_net(dev) != sock_net(sk))
+	if (!net_eq(dev_net(dev), sock_net(sk)))
 		goto drop;
 
 	if (dev->header_ops) {
