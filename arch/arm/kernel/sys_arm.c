@@ -29,8 +29,6 @@
 #include <linux/uaccess.h>
 #include <trace/ipc.h>
 
-DEFINE_TRACE(ipc_call);
-
 struct mmap_arg_struct {
 	unsigned long addr;
 	unsigned long len;

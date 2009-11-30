@@ -33,8 +33,6 @@
 #include <asm/uaccess.h>
 #include "entry.h"
 
-DEFINE_TRACE(ipc_call);
-
 /*
  * Perform the select(nd, in, out, ex, tv) and mmap() system
  * calls. Linux for S/390 isn't able to handle more than 5

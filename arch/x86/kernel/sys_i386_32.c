@@ -25,8 +25,6 @@
 
 #include <asm/syscalls.h>
 
-DEFINE_TRACE(ipc_call);
-
 /*
  * Perform the select(nd, in, out, ex, tv) and mmap() system
  * calls. Linux/i386 didn't use to be able to handle more than
