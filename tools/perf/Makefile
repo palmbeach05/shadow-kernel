@@ -384,6 +384,7 @@ LIB_H += util/hist.h
 LIB_H += util/thread.h
 LIB_H += util/data_map.h
 LIB_H += util/probe-finder.h
+LIB_H += util/probe-event.h
 
 LIB_OBJS += util/abspath.o
 LIB_OBJS += util/alias.o
@@ -427,6 +428,7 @@ LIB_OBJS += util/svghelper.o
 LIB_OBJS += util/sort.o
 LIB_OBJS += util/hist.o
 LIB_OBJS += util/data_map.o
+LIB_OBJS += util/probe-event.o
 
 BUILTIN_OBJS += builtin-annotate.o
 
