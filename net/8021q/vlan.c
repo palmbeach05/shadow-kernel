@@ -709,7 +709,6 @@ static void vlan_exit_net(struct net *net)
 	struct vlan_net *vn;
 
 	vn = net_generic(net, vlan_net_id);
-	rtnl_kill_links(net, &vlan_link_ops);
 	vlan_proc_cleanup(net);
 	kfree(vn);
 }
@@ -726,7 +725,7 @@ static int __init vlan_proto_init(void)
 	pr_info("%s v%s %s\n", vlan_fullname, vlan_version, vlan_copyright);
 	pr_info("All bugs added by %s\n", vlan_buggyright);
 
-	err = register_pernet_gen_device(&vlan_net_id, &vlan_net_ops);
+	err = register_pernet_subsys(&vlan_net_id, &vlan_net_ops);
 	if (err < 0)
 		goto err0;
 
@@ -751,7 +750,7 @@ err4:
 err3:
 	unregister_netdevice_notifier(&vlan_notifier_block);
 err2:
-	unregister_pernet_gen_device(vlan_net_id, &vlan_net_ops);
+	unregister_pernet_subsys(vlan_net_id, &vlan_net_ops);
 err0:
 	return err;
 }
@@ -771,7 +770,7 @@ static void __exit vlan_cleanup_module(void)
 	for (i = 0; i < VLAN_GRP_HASH_SIZE; i++)
 		BUG_ON(!hlist_empty(&vlan_group_hash[i]));
 
-	unregister_pernet_gen_device(vlan_net_id, &vlan_net_ops);
+	unregister_pernet_subsys(vlan_net_id, &vlan_net_ops);
 	rcu_barrier(); /* Wait for completion of call_rcu()'s */
 
 	vlan_gvrp_uninit();
