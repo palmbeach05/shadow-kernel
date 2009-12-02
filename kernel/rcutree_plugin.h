@@ -213,7 +213,7 @@ static void rcu_read_unlock_special(struct task_struct *t)
 		/*
 		 * If this was the last task on the current list, and if
 		 * we aren't waiting on any CPUs, report the quiescent state.
-		 * Note that both cpu_quiet_msk_finish() and cpu_quiet_msk()
+		 * Note that both rcu_report_qs_rsp() and rcu_report_qs_rnp()
 		 * drop rnp->lock and restore irq.
 		 */
 		if (!empty && rnp->qsmask == 0 &&
@@ -222,7 +222,7 @@ static void rcu_read_unlock_special(struct task_struct *t)
 
 			if (rnp->parent == NULL) {
 				/* Only one rcu_node in the tree. */
-				cpu_quiet_msk_finish(&rcu_preempt_state, flags);
+				rcu_report_qs_rsp(&rcu_preempt_state, flags);
 				return;
 			}
 			/* Report up the rest of the hierarchy. */
@@ -231,7 +231,7 @@ static void rcu_read_unlock_special(struct task_struct *t)
 			rnp_p = rnp->parent;
 			spin_lock_irqsave(&rnp_p->lock, flags);
 			WARN_ON_ONCE(rnp->qsmask);
-			cpu_quiet_msk(mask, &rcu_preempt_state, rnp_p, flags);
+			rcu_report_qs_rnp(mask, &rcu_preempt_state, rnp_p, flags);
 			return;
 		}
 		spin_unlock(&rnp->lock);
