@@ -1160,6 +1160,19 @@ static inline int queue_sector_discard_alignment(struct request_queue *q,
 		& (q->limits.discard_granularity - 1);
 }
 
+static inline unsigned int queue_discard_zeroes_data(struct request_queue *q)
+{
+	if (q->limits.discard_zeroes_data == 1)
+		return 1;
+
+	return 0;
+}
+
+static inline unsigned int bdev_discard_zeroes_data(struct block_device *bdev)
+{
+	return queue_discard_zeroes_data(bdev_get_queue(bdev));
+}
+
 static inline int queue_dma_alignment(struct request_queue *q)
 {
 	return q ? q->dma_alignment : 511;
