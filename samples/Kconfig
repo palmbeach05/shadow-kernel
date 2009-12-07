@@ -1,5 +1,3 @@
-# samples/Kconfig
-
 menuconfig SAMPLES
 	bool "Sample kernel code"
 	help
@@ -52,4 +50,3 @@ config SAMPLE_PSRWLOCK
 	depends on m
 
 endif # SAMPLES
-
