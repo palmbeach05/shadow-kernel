@@ -1691,6 +1691,7 @@ SYSCALL_DEFINE3(io_submit, aio_context_t, ctx_id, long, nr,
 	struct kioctx *ctx;
 	long ret = 0;
 	int i;
+	struct hlist_head batch_hash[AIO_BATCH_HASH_SIZE] = { { 0, }, };
 
 	struct hlist_head batch_hash[AIO_BATCH_HASH_SIZE] = { { 0, }, };
 

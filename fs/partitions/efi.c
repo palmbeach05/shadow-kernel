@@ -191,7 +191,6 @@ static size_t read_lba(struct parsed_partitions *state,
 		       u64 lba, u8 *buffer, size_t count)
 {
 	size_t totalreadcount = 0;
-	struct block_device *bdev = state->bdev;
 	sector_t n = lba * (bdev_logical_block_size(bdev) / 512);
 
 	if (!buffer || lba > last_lba(bdev))
@@ -200,7 +199,7 @@ static size_t read_lba(struct parsed_partitions *state,
 	while (count) {
 		int copied = 512;
 		Sector sect;
-		unsigned char *data = read_part_sector(state, n++, &sect);
+		unsigned char *data = read_dev_sector(bdev, n++, &sect);
 		if (!data)
 			break;
 		if (copied > count)
@@ -263,13 +262,16 @@ static gpt_header *alloc_read_gpt_header(struct parsed_partitions *state,
 					 u64 lba)
 {
 	gpt_header *gpt;
-	unsigned ssz = bdev_logical_block_size(state->bdev);
+	unsigned ssz = bdev_logical_block_size(bdev);
+
+	if (!bdev)
+		return NULL;
 
 	gpt = kzalloc(ssz, GFP_KERNEL);
 	if (!gpt)
 		return NULL;
 
-	if (read_lba(state, lba, (u8 *) gpt, ssz) < ssz) {
+	if (read_lba(bdev, lba, (u8 *) gpt, ssz) < ssz) {
 		kfree(gpt);
                 gpt=NULL;
 		return NULL;
@@ -602,7 +604,7 @@ int efi_partition(struct parsed_partitions *state)
 	gpt_header *gpt = NULL;
 	gpt_entry *ptes = NULL;
 	u32 i;
-	unsigned ssz = bdev_logical_block_size(state->bdev) / 512;
+	unsigned ssz = bdev_logical_block_size(bdev) / 512;
 
 	if (!find_valid_gpt(state, &gpt, &ptes) || !gpt || !ptes) {
 		kfree(gpt);
@@ -617,7 +619,7 @@ int efi_partition(struct parsed_partitions *state)
 		u64 size = le64_to_cpu(ptes[i].ending_lba) -
 			   le64_to_cpu(ptes[i].starting_lba) + 1ULL;
 
-		if (!is_pte_valid(&ptes[i], last_lba(state->bdev)))
+		if (!is_pte_valid(&ptes[i], last_lba(bdev)))
 			continue;
 
 		put_partition(state, i+1, start * ssz, size * ssz);

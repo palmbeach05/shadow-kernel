@@ -1054,7 +1054,7 @@ direct_io_worker(int rw, struct kiocb *iocb, struct inode *inode,
 	if (ret != -EIOCBQUEUED) {
 		/* All IO is now issued, send it on its way */
 		blk_run_address_space(inode->i_mapping);
- 		dio_await_completion(dio);
+		dio_await_completion(dio);
 	}
 
 	/*
@@ -1117,7 +1117,7 @@ __blockdev_direct_IO(int rw, struct kiocb *iocb, struct inode *inode,
 	struct dio *dio;
 
 	if (rw & WRITE)
-		rw = WRITE_ODIRECT;
+		rw = WRITE_ODIRECT_PLUG;
 
 	if (bdev)
 		bdev_blkbits = blksize_bits(bdev_logical_block_size(bdev));
