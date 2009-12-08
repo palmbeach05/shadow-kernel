@@ -367,8 +367,7 @@ static struct pcpu_chunk *pcpu_chunk_addr_search(void *addr)
  * New target map allocation length if extension is necessary, 0
  * otherwise.
  */
-static int pcpu_extend_area_map(struct pcpu_chunk *chunk)
-	__releases(lock) __acquires(lock)
+static int pcpu_need_to_extend(struct pcpu_chunk *chunk)
 {
 	int new_alloc;
 
@@ -1301,32 +1300,6 @@ void free_percpu(void *ptr)
 	spin_unlock_irqrestore(&pcpu_lock, flags);
 }
 EXPORT_SYMBOL_GPL(free_percpu);
-
-/**
- * is_kernel_percpu_address - test whether address is from static percpu area
- * @addr: address to test
- *
- * Test whether @addr belongs to in-kernel static percpu area.  Module
- * static percpu areas are not considered.  For those, use
- * is_module_percpu_address().
- *
- * RETURNS:
- * %true if @addr is from in-kernel static percpu area, %false otherwise.
- */
-bool is_kernel_percpu_address(unsigned long addr)
-{
-	const size_t static_size = __per_cpu_end - __per_cpu_start;
-	void __percpu *base = __addr_to_pcpu_ptr(pcpu_base_addr);
-	unsigned int cpu;
-
-	for_each_possible_cpu(cpu) {
-		void *start = per_cpu_ptr(base, cpu);
-
-		if ((void *)addr >= start && (void *)addr < start + static_size)
-			return true;
-        }
-	return false;
-}
 
 /**
  * per_cpu_ptr_to_phys - convert translated percpu address to physical address
