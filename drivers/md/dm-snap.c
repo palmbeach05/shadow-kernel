@@ -403,7 +403,7 @@ static uint32_t exception_hash(struct dm_exception_table *et, chunk_t chunk)
 	return (chunk >> et->hash_shift) & et->hash_mask;
 }
 
-static void remove_exception(struct dm_snap_exception *e)
+static void remove_exception(struct dm_exception *e)
 {
 	list_del(&e->hash_list);
 }
@@ -412,8 +412,8 @@ static void remove_exception(struct dm_snap_exception *e)
  * Return the exception data for a sector, or NULL if not
  * remapped.
  */
-static struct dm_exception *dm_lookup_exception(struct dm_exception_table *et,
-						chunk_t chunk)
+static struct dm_exception *lookup_exception(struct exception_table *et,
+						  chunk_t chunk)
 {
 	struct list_head *slot;
 	struct dm_exception *e;
@@ -427,7 +427,7 @@ static struct dm_exception *dm_lookup_exception(struct dm_exception_table *et,
 	return NULL;
 }
 
-static struct dm_exception *alloc_completed_exception(void)
+static struct dm_exception *alloc_exception(void)
 {
 	struct dm_exception *e;
 
@@ -438,7 +438,7 @@ static struct dm_exception *alloc_completed_exception(void)
 	return e;
 }
 
-static void free_completed_exception(struct dm_exception *e)
+static void free_exception(struct dm_exception *e)
 {
 	kmem_cache_free(exception_cache, e);
 }
@@ -464,7 +464,7 @@ static void free_pending_exception(struct dm_snap_pending_exception *pe)
 }
 
 static void insert_exception(struct exception_table *eh,
-			     struct dm_snap_exception *new_e)
+			     struct dm_exception *new_e)
 {
 	struct list_head *l;
 	struct dm_exception *e = NULL;
@@ -1017,7 +1017,7 @@ static void start_copy(struct dm_snap_pending_exception *pe)
 static struct dm_snap_pending_exception *
 __lookup_pending_exception(struct dm_snapshot *s, chunk_t chunk)
 {
-	struct dm_exception *e = dm_lookup_exception(&s->pending, chunk);
+	struct dm_exception *e = lookup_exception(&s->pending, chunk);
 
 	if (!e)
 		return NULL;
