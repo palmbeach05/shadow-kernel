@@ -187,53 +187,11 @@ static void crypt_iv_essiv_dtr(struct crypt_config *cc)
 static int crypt_iv_essiv_ctr(struct crypt_config *cc, struct dm_target *ti,
 			      const char *opts)
 {
-	struct iv_essiv_private *essiv = &cc->iv_gen_private.essiv;
-	struct hash_desc desc;
-	struct scatterlist sg;
-	int err;
-
-	sg_init_one(&sg, cc->key, cc->key_size);
-	desc.tfm = essiv->hash_tfm;
-	desc.flags = CRYPTO_TFM_REQ_MAY_SLEEP;
-
-	err = crypto_hash_digest(&desc, &sg, cc->key_size, essiv->salt);
-	if (err)
-		return err;
-
-	return crypto_cipher_setkey(essiv->tfm, essiv->salt,
-				    crypto_hash_digestsize(essiv->hash_tfm));
-}
-
-/* Wipe salt and reset key derived from volume key */
-static int crypt_iv_essiv_wipe(struct crypt_config *cc)
-{
-	struct iv_essiv_private *essiv = &cc->iv_gen_private.essiv;
-	unsigned salt_size = crypto_hash_digestsize(essiv->hash_tfm);
-
-	memset(essiv->salt, 0, salt_size);
-
-	return crypto_cipher_setkey(essiv->tfm, essiv->salt, salt_size);
-}
-
-static void crypt_iv_essiv_dtr(struct crypt_config *cc)
-{
-	struct iv_essiv_private *essiv = &cc->iv_gen_private.essiv;
-
-	crypto_free_cipher(essiv->tfm);
-	essiv->tfm = NULL;
-
-	crypto_free_hash(essiv->hash_tfm);
-	essiv->hash_tfm = NULL;
-
-	kzfree(essiv->salt);
-	essiv->salt = NULL;
-}
-
-static int crypt_iv_essiv_ctr(struct crypt_config *cc, struct dm_target *ti,
-			      const char *opts)
-{
 	struct crypto_cipher *essiv_tfm = NULL;
 	struct crypto_hash *hash_tfm = NULL;
+	struct hash_desc desc;
+	struct scatterlist sg;
+	unsigned int saltsize;
 	u8 *salt = NULL;
 	int err;
 
@@ -250,14 +208,27 @@ static int crypt_iv_essiv_ctr(struct crypt_config *cc, struct dm_target *ti,
 		goto bad;
 	}
 
-	salt = kzalloc(crypto_hash_digestsize(hash_tfm), GFP_KERNEL);
+	saltsize = crypto_hash_digestsize(hash_tfm);
+	salt = kzalloc(saltsize, GFP_KERNEL);
 	if (!salt) {
 		ti->error = "Error kmallocing salt storage in ESSIV";
 		err = -ENOMEM;
 		goto bad;
 	}
 
-	/* Allocate essiv_tfm */
+	sg_init_one(&sg, cc->key, cc->key_size);
+	desc.tfm = hash_tfm;
+	desc.flags = CRYPTO_TFM_REQ_MAY_SLEEP;
+	err = crypto_hash_digest(&desc, &sg, cc->key_size, salt);
+	crypto_free_hash(hash_tfm);
+	hash_tfm = NULL;
+
+	if (err) {
+		ti->error = "Error calculating hash in ESSIV";
+		goto bad;
+	}
+
+	/* Setup the essiv_tfm with the given salt */
 	essiv_tfm = crypto_alloc_cipher(cc->cipher, 0, CRYPTO_ALG_ASYNC);
 	if (IS_ERR(essiv_tfm)) {
 		ti->error = "Error allocating crypto tfm for ESSIV";
@@ -271,9 +242,24 @@ static int crypt_iv_essiv_ctr(struct crypt_config *cc, struct dm_target *ti,
 		err = -EINVAL;
 		goto bad;
 	}
+	err = crypto_cipher_setkey(essiv_tfm, salt, saltsize);
+	if (err) {
+		ti->error = "Failed to set key for ESSIV cipher";
+		goto bad;
+	}
+	kzfree(salt);
 
 	cc->iv_gen_private.essiv.tfm = essiv_tfm;
 	return 0;
+
+bad:
+	if (essiv_tfm && !IS_ERR(essiv_tfm))
+		crypto_free_cipher(essiv_tfm);
+	if (hash_tfm && !IS_ERR(hash_tfm))
+		crypto_free_hash(hash_tfm);
+	kzfree(salt);
+	return err;
+}
 
 static int crypt_iv_essiv_gen(struct crypt_config *cc, u8 *iv, sector_t sector)
 {
