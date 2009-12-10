@@ -363,8 +363,8 @@ static void unregister_snapshot(struct dm_snapshot *s)
  * The lowest hash_shift bits of the chunk number are ignored, allowing
  * some consecutive chunks to be grouped together.
  */
-static int dm_exception_table_init(struct dm_exception_table *et,
-				   uint32_t size, unsigned hash_shift)
+static int init_exception_table(struct dm_exception_table *et, uint32_t size,
+				unsigned hash_shift)
 {
 	unsigned int i;
 
@@ -380,8 +380,8 @@ static int dm_exception_table_init(struct dm_exception_table *et,
 	return 0;
 }
 
-static void dm_exception_table_exit(struct dm_exception_table *et,
-				    struct kmem_cache *mem)
+static void exit_exception_table(struct dm_exception_table *et,
+				 struct kmem_cache *mem)
 {
 	struct list_head *slot;
 	struct dm_exception *ex, *next;
@@ -412,7 +412,7 @@ static void remove_exception(struct dm_exception *e)
  * Return the exception data for a sector, or NULL if not
  * remapped.
  */
-static struct dm_exception *lookup_exception(struct exception_table *et,
+static struct dm_exception *lookup_exception(struct dm_exception_table *et,
 						  chunk_t chunk)
 {
 	struct list_head *slot;
@@ -463,7 +463,7 @@ static void free_pending_exception(struct dm_snap_pending_exception *pe)
 	atomic_dec(&s->pending_exceptions_count);
 }
 
-static void insert_exception(struct exception_table *eh,
+static void insert_exception(struct dm_exception_table *eh,
 			     struct dm_exception *new_e)
 {
 	struct list_head *l;
