@@ -41,8 +41,6 @@ struct io {
 
 static struct kmem_cache *_dm_io_cache;
 
-static struct kmem_cache *_dm_io_cache;
-
 /*
  * io contexts are only dynamically allocated for asynchronous
  * io.  Since async io is likely to be the majority of io we'll
