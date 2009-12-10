@@ -72,6 +72,7 @@ struct crypt_iv_operations {
 		   const char *opts);
 	void (*dtr)(struct crypt_config *cc);
 	int (*init)(struct crypt_config *cc);
+	int (*wipe)(struct crypt_config *cc);
 	int (*generator)(struct crypt_config *cc, u8 *iv, sector_t sector);
 };
 
@@ -197,6 +198,17 @@ static int crypt_iv_essiv_init(struct crypt_config *cc)
 
 	return crypto_cipher_setkey(essiv->tfm, essiv->salt,
 				    crypto_hash_digestsize(essiv->hash_tfm));
+}
+
+/* Wipe salt and reset key derived from volume key */
+static int crypt_iv_essiv_wipe(struct crypt_config *cc)
+{
+	struct iv_essiv_private *essiv = &cc->iv_gen_private.essiv;
+	unsigned salt_size = crypto_hash_digestsize(essiv->hash_tfm);
+
+	memset(essiv->salt, 0, salt_size);
+
+	return crypto_cipher_setkey(essiv->tfm, essiv->salt, salt_size);
 }
 
 static void crypt_iv_essiv_dtr(struct crypt_config *cc)
@@ -334,6 +346,7 @@ static struct crypt_iv_operations crypt_iv_essiv_ops = {
 	.ctr       = crypt_iv_essiv_ctr,
 	.dtr       = crypt_iv_essiv_dtr,
 	.init      = crypt_iv_essiv_init,
+	.wipe      = crypt_iv_essiv_wipe,
 	.generator = crypt_iv_essiv_gen
 };
 
