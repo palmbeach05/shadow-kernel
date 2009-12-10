@@ -71,15 +71,11 @@ struct crypt_iv_operations {
 	int (*ctr)(struct crypt_config *cc, struct dm_target *ti,
 		   const char *opts);
 	void (*dtr)(struct crypt_config *cc);
-	int (*init)(struct crypt_config *cc);
-	int (*wipe)(struct crypt_config *cc);
 	int (*generator)(struct crypt_config *cc, u8 *iv, sector_t sector);
 };
 
 struct iv_essiv_private {
 	struct crypto_cipher *tfm;
-	struct crypto_hash *hash_tfm;
-	u8 *salt;
 };
 
 struct iv_benbi_private {
@@ -180,8 +176,16 @@ static int crypt_iv_plain_gen(struct crypt_config *cc, u8 *iv, sector_t sector)
 	return 0;
 }
 
-/* Initialise ESSIV - compute salt but no local memory allocations */
-static int crypt_iv_essiv_init(struct crypt_config *cc)
+static void crypt_iv_essiv_dtr(struct crypt_config *cc)
+{
+	struct iv_essiv_private *essiv = &cc->iv_gen_private.essiv;
+
+	crypto_free_cipher(essiv->tfm);
+	essiv->tfm = NULL;
+}
+
+static int crypt_iv_essiv_ctr(struct crypt_config *cc, struct dm_target *ti,
+			      const char *opts)
 {
 	struct iv_essiv_private *essiv = &cc->iv_gen_private.essiv;
 	struct hash_desc desc;
@@ -268,20 +272,8 @@ static int crypt_iv_essiv_ctr(struct crypt_config *cc, struct dm_target *ti,
 		goto bad;
 	}
 
-	cc->iv_gen_private.essiv.salt = salt;
 	cc->iv_gen_private.essiv.tfm = essiv_tfm;
-	cc->iv_gen_private.essiv.hash_tfm = hash_tfm;
-
 	return 0;
-
-bad:
-	if (essiv_tfm && !IS_ERR(essiv_tfm))
-		crypto_free_cipher(essiv_tfm);
-	if (hash_tfm && !IS_ERR(hash_tfm))
-		crypto_free_hash(hash_tfm);
-	kfree(salt);
-	return err;
-}
 
 static int crypt_iv_essiv_gen(struct crypt_config *cc, u8 *iv, sector_t sector)
 {
