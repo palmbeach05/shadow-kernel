@@ -1,14 +1,12 @@
 #ifndef _SPARC_FCNTL_H
 #define _SPARC_FCNTL_H
 
-/* open/fcntl - O_SYNC is only implemented on blocks devices and on files
-   located on an ext2 file system */
 #define O_APPEND	0x0008
 #define FASYNC		0x0040	/* fcntl, for BSD compatibility */
 #define O_CREAT		0x0200	/* not fcntl */
 #define O_TRUNC		0x0400	/* not fcntl */
 #define O_EXCL		0x0800	/* not fcntl */
-#define O_SYNC		0x2000
+#define O_DSYNC		0x2000	/* used to be O_SYNC, see below */
 #define O_NONBLOCK	0x4000
 #if defined(__sparc__) && defined(__arch64__)
 #define O_NDELAY	0x0004

@@ -3,8 +3,6 @@
 
 #include <linux/types.h>
 
-/* open/fcntl - O_SYNC is only implemented on blocks devices and on files
-   located on an ext2 file system */
 #define O_ACCMODE	00000003
 #define O_RDONLY	00000000
 #define O_WRONLY	00000001
@@ -27,8 +25,8 @@
 #ifndef O_NONBLOCK
 #define O_NONBLOCK	00004000
 #endif
-#ifndef O_SYNC
-#define O_SYNC		00010000
+#ifndef O_DSYNC
+#define O_DSYNC		00010000	/* used to be O_SYNC, see below */
 #endif
 #ifndef FASYNC
 #define FASYNC		00020000	/* fcntl, for BSD compatibility */

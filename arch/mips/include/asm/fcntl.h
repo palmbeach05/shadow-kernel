@@ -10,7 +10,7 @@
 
 
 #define O_APPEND	0x0008
-#define O_SYNC		0x0010
+#define O_DSYNC		0x0010	/* used to be O_SYNC, see below */
 #define O_NONBLOCK	0x0080
 #define O_CREAT         0x0100	/* not fcntl */
 #define O_TRUNC		0x0200	/* not fcntl */

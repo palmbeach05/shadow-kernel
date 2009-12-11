@@ -1,8 +1,6 @@
 #ifndef _ALPHA_FCNTL_H
 #define _ALPHA_FCNTL_H
 
-/* open/fcntl - O_SYNC is only implemented on blocks devices and on files
-   located on an ext2 file system */
 #define O_CREAT		 01000	/* not fcntl */
 #define O_TRUNC		 02000	/* not fcntl */
 #define O_EXCL		 04000	/* not fcntl */
@@ -10,7 +8,7 @@
 
 #define O_NONBLOCK	 00004
 #define O_APPEND	 00010
-#define O_SYNC		040000
+#define O_DSYNC		040000	/* used to be O_SYNC, see below */
 #define O_DIRECTORY	0100000	/* must be a directory */
 #define O_NOFOLLOW	0200000 /* don't follow links */
 #define O_LARGEFILE	0400000 /* will be set by the kernel on every open */
