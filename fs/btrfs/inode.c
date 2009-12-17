@@ -241,8 +241,7 @@ static noinline int cow_file_range_inline(struct btrfs_trans_handle *trans,
 		return 1;
 	}
 
-	ret = btrfs_drop_extents(trans, root, inode, start,
-				 aligned_end, aligned_end, start,
+	ret = btrfs_drop_extents(trans, inode, start, aligned_end,
 				 &hint_byte, 1);
 	BUG_ON(ret);
 
@@ -1608,7 +1607,6 @@ static int insert_reserved_file_extent(struct btrfs_trans_handle *trans,
 				       struct inode *inode, u64 file_pos,
 				       u64 disk_bytenr, u64 disk_num_bytes,
 				       u64 num_bytes, u64 ram_bytes,
-				       u64 locked_end,
 				       u8 compression, u8 encryption,
 				       u16 other_encoding, int extent_type)
 {
@@ -1634,9 +1632,8 @@ static int insert_reserved_file_extent(struct btrfs_trans_handle *trans,
 	 * the caller is expected to unpin it and allow it to be merged
 	 * with the others.
 	 */
-	ret = btrfs_drop_extents(trans, root, inode, file_pos,
-				 file_pos + num_bytes, locked_end,
-				 file_pos, &hint, 0);
+	ret = btrfs_drop_extents(trans, inode, file_pos, file_pos + num_bytes,
+				 &hint, 0);
 	BUG_ON(ret);
 
 	ins.objectid = inode->i_ino;
@@ -1767,7 +1764,7 @@ static int btrfs_finish_ordered_io(struct inode *inode, u64 start, u64 end)
 		compressed = 1;
 	if (test_bit(BTRFS_ORDERED_PREALLOC, &ordered_extent->flags)) {
 		BUG_ON(compressed);
-		ret = btrfs_mark_extent_written(trans, root, inode,
+		ret = btrfs_mark_extent_written(trans, inode,
 						ordered_extent->file_offset,
 						ordered_extent->file_offset +
 						ordered_extent->len);
@@ -1778,8 +1775,6 @@ static int btrfs_finish_ordered_io(struct inode *inode, u64 start, u64 end)
 						ordered_extent->start,
 						ordered_extent->disk_len,
 						ordered_extent->len,
-						ordered_extent->len,
-						ordered_extent->file_offset +
 						ordered_extent->len,
 						compressed, 0, 0,
 						BTRFS_FILE_EXTENT_REG);
@@ -5827,8 +5822,7 @@ static int prealloc_file_range(struct inode *inode, u64 start, u64 end,
 		ret = insert_reserved_file_extent(trans, inode,
 						  cur_offset, ins.objectid,
 						  ins.offset, ins.offset,
-						  ins.offset, locked_end,
-						  0, 0, 0,
+						  ins.offset, 0, 0, 0,
 						  BTRFS_FILE_EXTENT_PREALLOC);
 		BUG_ON(ret);
 		btrfs_drop_extent_cache(inode, cur_offset,

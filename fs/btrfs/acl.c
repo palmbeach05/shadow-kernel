@@ -167,7 +167,7 @@ static int btrfs_xattr_acl_set(struct dentry *dentry, const char *name,
 		}
 	}
 
-	ret = btrfs_set_acl(NULL, inode, acl, type);
+	ret = btrfs_set_acl(NULL, dentry->d_inode, acl, type);
 
 	posix_acl_release(acl);
 
