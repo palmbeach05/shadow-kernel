@@ -25,6 +25,9 @@ unsigned int __machine_arch_type;
 #include <linux/stddef.h>	/* for NULL */
 #include <linux/linkage.h>
 #include <asm/string.h>
+#include <linux/linkage.h>
+
+#include <asm/unaligned.h>
 
 #include <asm/unaligned.h>
 
@@ -154,14 +157,58 @@ void *memcpy(void *__dest, __const void *__src, size_t __n)
 /*
  * gzip delarations
  */
+
+unsigned char *output_data;
+unsigned long output_ptr;
+
+#define STATIC static
+
+/* Diagnostic functions */
+#ifdef DEBUG
+#  define Assert(cond,msg) {if(!(cond)) error(msg);}
+#  define Trace(x) fprintf x
+#  define Tracev(x) {if (verbose) fprintf x ;}
+#  define Tracevv(x) {if (verbose>1) fprintf x ;}
+#  define Tracec(c,x) {if (verbose && (c)) fprintf x ;}
+#  define Tracecv(c,x) {if (verbose>1 && (c)) fprintf x ;}
+#else
+#  define Assert(cond,msg)
+#  define Trace(x)
+#  define Tracev(x)
+#  define Tracevv(x)
+#  define Tracec(c,x)
+#  define Tracecv(c,x)
+#endif
+
+static void error(char *m);
+
 extern char input_data[];
 extern char input_data_end[];
 
 unsigned char *output_data;
 unsigned long output_ptr;
 
+static void error(char *m);
+
+static void putstr(const char *);
+
 unsigned long free_mem_ptr;
 unsigned long free_mem_end_ptr;
+
+#ifdef STANDALONE_DEBUG
+#define NO_INFLATE_MALLOC
+#endif
+
+#define ARCH_HAS_DECOMP_WDOG
+
+#ifdef CONFIG_KERNEL_GZIP
+#include "../../../../lib/decompress_inflate.c"
+#endif
+
+#ifdef CONFIG_KERNEL_LZO
+#include "../../../../lib/decompress_unlzo.c"
+#endif
+>>>>>>> e7db7b4270ed... arm: add support for LZO-compressed kernels
 
 #ifndef arch_error
 #define arch_error(x)
@@ -207,6 +254,7 @@ decompress_kernel(unsigned long output_start, unsigned long free_mem_ptr_p,
 	putstr("Uncompressing Linux...");
 	do_decompress(input_data, input_data_end - input_data,
 			output_data, error);
+
 	putstr(" done, booting the kernel.\n");
 	return output_ptr;
 }
