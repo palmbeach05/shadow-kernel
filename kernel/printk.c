@@ -33,10 +33,11 @@
 #include <linux/bootmem.h>
 #include <linux/syscalls.h>
 #include <linux/kexec.h>
+#include <linux/ratelimit.h>
 #include <trace/kernel.h>
 #include <linux/syslog.h>
 #include <linux/kmsg_dump.h>
-#include <linux/ratelimit.h>
+#include <linux/syslog.h>
 
 #include <asm/uaccess.h>
 
