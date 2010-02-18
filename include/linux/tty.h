@@ -57,6 +57,15 @@
  * isn't in use (eg VINTR has no character etc)
  */
 #define __DISABLED_CHAR '\0'
+ 
+/*
+ * We default to dicing tty buffer allocations to this many characters
+ * in order to avoid multiple page allocations. We assume tty_buffer itself
+ * is under 256 bytes. See tty_buffer_find for the allocation logic this
+ * must match
+ */
+
+#define TTY_BUFFER_PAGE		((PAGE_SIZE  - 256) / 2)
 
 #define INTR_CHAR(tty) ((tty)->termios->c_cc[VINTR])
 #define QUIT_CHAR(tty) ((tty)->termios->c_cc[VQUIT])
