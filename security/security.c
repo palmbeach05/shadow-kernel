@@ -21,10 +21,12 @@
 static __initdata char chosen_lsm[SECURITY_NAME_MAX + 1];
 
 /* things that live in capability.c */
-extern struct security_operations default_security_ops;
 extern void security_fixup_ops(struct security_operations *ops);
 
-struct security_operations *security_ops;	/* Initialized to NULL */
+static struct security_operations *security_ops;
+static struct security_operations default_security_ops = {
+	.name	= "default",
+};
 
 static inline int verify(struct security_operations *ops)
 {
@@ -59,6 +61,11 @@ int __init security_init(void)
 	do_security_initcalls();
 
 	return 0;
+}
+
+void reset_security_ops(void)
+{
+	security_ops = &default_security_ops;
 }
 
 /* Save user chosen LSM */
