@@ -5637,6 +5637,9 @@ static int __migrate_task(struct task_struct *p, int src_cpu, int dest_cpu)
 	/* Already moved. */
 	if (task_cpu(p) != src_cpu)
 		goto done;
+	/* Waking up, don't get in the way of try_to_wake_up(). */
+	if (p->state == TASK_WAKING)
+		goto fail;
 	/* Affinity changed (again). */
 	if (!cpumask_test_cpu(dest_cpu, &p->cpus_allowed))
 		goto fail;
