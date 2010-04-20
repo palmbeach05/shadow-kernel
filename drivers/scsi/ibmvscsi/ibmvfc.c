@@ -2721,6 +2721,7 @@ static struct ibmvfc_async_crq *ibmvfc_next_async_crq(struct ibmvfc_host *vhost)
 	if (crq->valid & 0x80) {
 		if (++async_crq->cur == async_crq->size)
 			async_crq->cur = 0;
+		rmb();
 	} else
 		crq = NULL;
 
@@ -2743,6 +2744,7 @@ static struct ibmvfc_crq *ibmvfc_next_crq(struct ibmvfc_host *vhost)
 	if (crq->valid & 0x80) {
 		if (++queue->cur == queue->size)
 			queue->cur = 0;
+		rmb();
 	} else
 		crq = NULL;
 
@@ -2791,12 +2793,14 @@ static void ibmvfc_tasklet(void *data)
 		while ((async = ibmvfc_next_async_crq(vhost)) != NULL) {
 			ibmvfc_handle_async(async, vhost);
 			async->valid = 0;
+			wmb();
 		}
 
 		/* Pull all the valid messages off the CRQ */
 		while ((crq = ibmvfc_next_crq(vhost)) != NULL) {
 			ibmvfc_handle_crq(crq, vhost);
 			crq->valid = 0;
+			wmb();
 		}
 
 		vio_enable_interrupts(vdev);
@@ -2804,10 +2808,12 @@ static void ibmvfc_tasklet(void *data)
 			vio_disable_interrupts(vdev);
 			ibmvfc_handle_async(async, vhost);
 			async->valid = 0;
+			wmb();
 		} else if ((crq = ibmvfc_next_crq(vhost)) != NULL) {
 			vio_disable_interrupts(vdev);
 			ibmvfc_handle_crq(crq, vhost);
 			crq->valid = 0;
+			wmb();
 		} else
 			done = 1;
 	}
