@@ -190,7 +190,7 @@ static inline u32 task_sid(const struct task_struct *task)
  */
 static inline u32 current_sid(void)
 {
-	const struct task_security_struct *tsec = current_cred()->security;
+	const struct task_security_struct *tsec = current_security();
 
 	return tsec->sid;
 }
@@ -1584,8 +1584,7 @@ static int may_create(struct inode *dir,
 		      struct dentry *dentry,
 		      u16 tclass)
 {
-	const struct cred *cred = current_cred();
-	const struct task_security_struct *tsec = cred->security;
+	const struct task_security_struct *tsec = current_security();
 	struct inode_security_struct *dsec;
 	struct superblock_security_struct *sbsec;
 	u32 sid, newsid;
@@ -2250,8 +2249,7 @@ static int selinux_bprm_set_creds(struct linux_binprm *bprm)
 
 static int selinux_bprm_secureexec(struct linux_binprm *bprm)
 {
-	const struct cred *cred = current_cred();
-	const struct task_security_struct *tsec = cred->security;
+	const struct task_security_struct *tsec = current_security();
 	u32 sid, osid;
 	int atsecure = 0;
 
@@ -2626,8 +2624,7 @@ static int selinux_inode_init_security(struct inode *inode, struct inode *dir,
 				       char **name, void **value,
 				       size_t *len)
 {
-	const struct cred *cred = current_cred();
-	const struct task_security_struct *tsec = cred->security;
+	const struct task_security_struct *tsec = current_security();
 	struct inode_security_struct *dsec;
 	struct superblock_security_struct *sbsec;
 	u32 sid, newsid, clen;
@@ -3762,8 +3759,7 @@ static int sock_has_perm(struct task_struct *task, struct sock *sk, u32 perms)
 static int selinux_socket_create(int family, int type,
 				 int protocol, int kern)
 {
-	const struct cred *cred = current_cred();
-	const struct task_security_struct *tsec = cred->security;
+	const struct task_security_struct *tsec = current_security();
 	u32 newsid;
 	u16 secclass;
 
@@ -3778,8 +3774,7 @@ static int selinux_socket_create(int family, int type,
 static int selinux_socket_post_create(struct socket *sock, int family,
 				      int type, int protocol, int kern)
 {
-	const struct cred *cred = current_cred();
-	const struct task_security_struct *tsec = cred->security;
+	const struct task_security_struct *tsec = current_security();
 	struct inode_security_struct *isec = SOCK_INODE(sock)->i_security;
 	struct sk_security_struct *sksec;
 	int err = 0;
