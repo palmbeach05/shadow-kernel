@@ -162,10 +162,14 @@ update_ts_time_stats(int cpu, struct tick_sched *ts, ktime_t now, u64 *last_upda
 
 	if (ts->idle_active) {
 		delta = ktime_sub(now, ts->idle_entrytime);
+<<<<<<< HEAD
 		if (nr_iowait_cpu(cpu) > 0)
 			ts->iowait_sleeptime = ktime_add(ts->iowait_sleeptime, delta);
 		else
 			ts->idle_sleeptime = ktime_add(ts->idle_sleeptime, delta);
+=======
+		ts->idle_sleeptime = ktime_add(ts->idle_sleeptime, delta);
+>>>>>>> 8c7b09f43f4bf (sched: Update the idle statistics in get_cpu_idle_time_us())
 		ts->idle_entrytime = now;
 	}
 
@@ -237,18 +241,25 @@ EXPORT_SYMBOL_GPL(get_cpu_idle_time_us);
  *
  * This function returns -1 if NOHZ is not enabled.
  */
-u64 get_cpu_iowait_time_us(int cpu, u64 *last_update_time)
+u64 get_cpu_idle_time_us(int cpu, u64 *last_update_time)
 {
 	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+	ktime_t now;
 
 	if (!tick_nohz_enabled)
 		return -1;
 
-	update_ts_time_stats(cpu, ts, ktime_get(), last_update_time);
+	now = ktime_get();
+	update_ts_time_stats(ts, now);
 
-	return ktime_to_us(ts->iowait_sleeptime);
+	if (ts->idle_active)
+		*last_update_time = ktime_to_us(ts->idle_lastupdate);
+	else
+		*last_update_time = ktime_to_us(now);
+
+	return ktime_to_us(ts->idle_sleeptime);
 }
-EXPORT_SYMBOL_GPL(get_cpu_iowait_time_us);
+EXPORT_SYMBOL_GPL(get_cpu_idle_time_us);
 
 /**
  * tick_nohz_stop_sched_tick - stop the idle tick from the idle task
