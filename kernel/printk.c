@@ -33,6 +33,7 @@
 #include <linux/bootmem.h>
 #include <linux/syscalls.h>
 #include <linux/kexec.h>
+#include <linux/kdb.h>
 #include <linux/ratelimit.h>
 #include <trace/kernel.h>
 #include <linux/syslog.h>
@@ -678,6 +679,14 @@ asmlinkage int printk(const char *fmt, ...)
 	va_list args;
 	int r;
 
+#ifdef CONFIG_KGDB_KDB
+	if (unlikely(kdb_trap_printk)) {
+		va_start(args, fmt);
+		r = vkdb_printf(fmt, args);
+		va_end(args);
+		return r;
+	}
+#endif
 	va_start(args, fmt);
 	_trace_kernel_printk(_RET_IP_);
 	r = vprintk(fmt, args);
