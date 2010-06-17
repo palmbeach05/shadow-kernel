@@ -231,7 +231,7 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 HOSTCC       = gcc
 HOSTCXX      = g++
 HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -Os -fomit-frame-pointer
-HOSTCXXFLAGS = -Os
+HOSTCXXFLAGS = -O2
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -347,19 +347,20 @@ LINUXINCLUDE    := -I$(srctree)/arch/$(hdr-arch)/include -Iinclude \
                    $(if $(KBUILD_SRC), -I$(srctree)/include) \
                    -include include/generated/autoconf.h
 
-KBUILD_CPPFLAGS := -D__KERNEL__
+KBUILD_CPPFLAGS := -D__KERNEL__ -DKERNEL_VER_NOSCM=\"$(KERNEL_VER_NOSCM)\"
 
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
 		   -fno-delete-null-pointer-checks \
-		   -Os
+		   -0s
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
 KERNELRELEASE = $(shell cat include/config/kernel.release 2> /dev/null)
 KERNELVERSION = $(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
+KERNEL_VER_NOSCM = $(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
 
 export VERSION PATCHLEVEL SUBLEVEL KERNELRELEASE KERNELVERSION
 export ARCH SRCARCH CONFIG_SHELL HOSTCC HOSTCFLAGS CROSS_COMPILE AS LD CC
@@ -413,9 +414,9 @@ endif
 # of make so .config is not included in this case either (for *config).
 
 no-dot-config-targets := clean mrproper distclean \
-			 cscope TAGS tags help %docs check% coccicheck \
+			 cscope TAGS tags help %docs check% \
 			 include/linux/version.h headers_% \
-			 kernelrelease kernelversion %src-pkg
+			 kernelrelease kernelversion
 
 config-targets := 0
 mixed-targets  := 0
@@ -527,7 +528,7 @@ endif # $(dot-config)
 # The all: target is the default when no target is given on the
 # command line.
 # This allow a user to issue only 'make' to build a kernel including modules
-# Defaults to vmlinux, but the arch makefile usually adds further targets
+# Defaults vmlinux but it is usually overridden in the arch makefile
 all: vmlinux
 
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
@@ -560,11 +561,6 @@ endif
 
 ifdef CONFIG_FUNCTION_TRACER
 KBUILD_CFLAGS	+= -pg
-endif
-
-# arch Makefile detects if the compiler permits use of immediate values
-ifdef USE_IMMEDIATE
-KBUILD_CFLAGS	+= -DUSE_IMMEDIATE
 endif
 
 # We trigger additional mismatches with less inlining
@@ -656,7 +652,7 @@ export mod_strip_cmd
 
 
 ifeq ($(KBUILD_EXTMOD),)
-core-y		+= kernel/ mm/ fs/ ipc/ security/ crypto/ block/ ltt/
+core-y		+= kernel/ mm/ fs/ ipc/ security/ crypto/ block/
 
 vmlinux-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(init-m) \
 		     $(core-y) $(core-m) $(drivers-y) $(drivers-m) \
@@ -889,81 +885,12 @@ PHONY += $(vmlinux-dirs)
 $(vmlinux-dirs): prepare scripts
 	$(Q)$(MAKE) $(build)=$@
 
-# Build the kernel release string
-#
-# The KERNELRELEASE value built here is stored in the file
-# include/config/kernel.release, and is used when executing several
-# make targets, such as "make install" or "make modules_install."
-#
-# The eventual kernel release string consists of the following fields,
-# shown in a hierarchical format to show how smaller parts are concatenated
-# to form the larger and final value, with values coming from places like
-# the Makefile, kernel config options, make command line options and/or
-# SCM tag information.
-#
-#	$(KERNELVERSION)
-#	  $(VERSION)			eg, 2
-#	  $(PATCHLEVEL)			eg, 6
-#	  $(SUBLEVEL)			eg, 18
-#	  $(EXTRAVERSION)		eg, -rc6
-#	$(localver-full)
-#	  $(localver)
-#	    localversion*		(files without backups, containing '~')
-#	    $(CONFIG_LOCALVERSION)	(from kernel config setting)
-#	  $(LOCALVERSION)		(from make command line, if provided)
-#	  $(localver-extra)
-#	    $(scm-identifier)		(unique SCM tag, if one exists)
-#	      ./scripts/setlocalversion	(only with CONFIG_LOCALVERSION_AUTO)
-#	      .scmversion		(only with CONFIG_LOCALVERSION_AUTO)
-#	    +				(only without CONFIG_LOCALVERSION_AUTO
-#					 and without LOCALVERSION= and
-#					 repository is at non-tagged commit)
-#
-# For kernels without CONFIG_LOCALVERSION_AUTO compiled from an SCM that has
-# been revised beyond a tagged commit, `+' is appended to the version string
-# when not overridden by using "make LOCALVERSION=".  This indicates that the
-# kernel is not a vanilla release version and has been modified.
-
-pattern = ".*/localversion[^~]*"
-string  = $(shell cat /dev/null \
-	   `find $(objtree) $(srctree) -maxdepth 1 -regex $(pattern) | sort -u`)
-
-localver = $(subst $(space),, $(string) \
-			      $(patsubst "%",%,$(CONFIG_LOCALVERSION)))
-
-# scripts/setlocalversion is called to create a unique identifier if the source
-# is managed by a known SCM and the repository has been revised since the last
-# tagged (release) commit.  The format of the identifier is determined by the
-# SCM's implementation.
-#
-# .scmversion is used when generating rpm packages so we do not loose
-# the version information from the SCM when we do the build of the kernel
-# from the copied source
-ifeq ($(wildcard .scmversion),)
-        scm-identifier = $(shell $(CONFIG_SHELL) \
-                         $(srctree)/scripts/setlocalversion $(srctree))
-else
-        scm-identifier = $(shell cat .scmversion 2> /dev/null)
-endif
-
-ifdef CONFIG_LOCALVERSION_AUTO
-	localver-extra = $(scm-identifier)
-else
-	ifneq ($(scm-identifier),)
-		ifeq ("$(origin LOCALVERSION)", "undefined")
-			localver-extra = +
-		endif
-	endif
-endif
-
-localver-full = $(localver)$(LOCALVERSION)$(localver-extra)
-KERNEL_VER_NOSCM = $(KERNELVERSION)$(localver)
-
 # Store (new) KERNELRELASE string in include/config/kernel.release
-kernelrelease = $(KERNELVERSION)$(localver-full)
+localversion = $(shell $(CONFIG_SHELL) \
+	       $(srctree)/scripts/setlocalversion $(srctree))
 include/config/kernel.release: include/config/auto.conf FORCE
 	$(Q)rm -f $@
-	$(Q)echo $(kernelrelease) > $@
+	$(Q)echo $(KERNELVERSION)$(localversion) > $@
 
 
 # Things we need to do before we recursively start building the kernel
@@ -1016,8 +943,7 @@ define filechk_utsrelease.h
 	  echo '"$(KERNELRELEASE)" exceeds $(uts_len) characters' >&2;    \
 	  exit 1;                                                         \
 	fi;                                                               \
-	(echo \#define KERNEL_VER_NOSCM \"$(KERNEL_VER_NOSCM)\";          \
-	echo \#define UTS_RELEASE \"$(KERNEL_VER_NOSCM)-AeroKernel\";)
+	(echo \#define UTS_RELEASE \"$(KERNELRELEASE)\";)
 endef
 
 define filechk_version.h
@@ -1103,7 +1029,7 @@ all: modules
 #	using awk while concatenating to the final file.
 
 PHONY += modules
-modules: $(vmlinux-dirs) $(if $(KBUILD_BUILTIN),vmlinux) modules.builtin
+modules: $(vmlinux-dirs) $(if $(KBUILD_BUILTIN),vmlinux)
 	$(Q)$(AWK) '!x[$$0]++' $(vmlinux-dirs:%=$(objtree)/%/modules.order) > $(objtree)/modules.order
 	@$(kecho) '  Building modules, stage 2.';
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost
@@ -1125,7 +1051,7 @@ PHONY += modules_install
 modules_install: _modinst_ _modinst_post
 
 PHONY += _modinst_
-_modinst_:
+_modinst_: modules.builtin
 	@if [ -z "`$(DEPMOD) -V 2>/dev/null | grep module-init-tools`" ]; then \
 		echo "Warning: you may need to install module-init-tools"; \
 		echo "See http://www.codemonkey.org.uk/docs/post-halloween-2.6.txt";\
@@ -1236,8 +1162,6 @@ distclean: mrproper
 # rpm target kept for backward compatibility
 package-dir	:= $(srctree)/scripts/package
 
-%src-pkg: FORCE
-	$(Q)$(MAKE) $(build)=$(package-dir) $@
 %pkg: include/config/kernel.release FORCE
 	$(Q)$(MAKE) $(build)=$(package-dir) $@
 rpm: include/config/kernel.release FORCE
@@ -1289,9 +1213,8 @@ help:
 	@echo  '  includecheck    - Check for duplicate included header files'
 	@echo  '  export_report   - List the usages of all exported symbols'
 	@echo  '  headers_check   - Sanity check on exported headers'
-	@echo  '  headerdep       - Detect inclusion cycles in headers'
-	@$(MAKE) -f $(srctree)/scripts/Makefile.help checker-help
-	@echo  ''
+	@echo  '  headerdep       - Detect inclusion cycles in headers'; \
+	 echo  ''
 	@echo  'Kernel packaging:'
 	@$(MAKE) $(build)=$(package-dir) help
 	@echo  ''
@@ -1449,9 +1372,6 @@ versioncheck:
 	find * $(RCS_FIND_IGNORE) \
 		-name '*.[hcS]' -type f -print | sort \
 		| xargs $(PERL) -w $(srctree)/scripts/checkversion.pl
-
-coccicheck:
-	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/$@
 
 namespacecheck:
 	$(PERL) $(srctree)/scripts/namespace.pl
