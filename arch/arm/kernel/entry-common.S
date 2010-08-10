@@ -94,42 +94,93 @@ ENDPROC(ret_from_fork)
 #define CALL(x) .long x
 
 #ifdef CONFIG_FUNCTION_TRACER
-#ifdef CONFIG_DYNAMIC_FTRACE
-ENTRY(__gnu_mcount_nc)
-	mov ip, lr
-	 ldm sp!, {lr}
-	 mov pc, ip
+/*
+ * When compiling with -pg, gcc inserts a call to the mcount routine at the
+ * start of every function.  In mcount, apart from the function's address (in
+ * lr), we need to get hold of the function's caller's address.
+ *
+ * Older GCCs (pre-4.4) inserted a call to a routine called mcount like this:
+ *
+ *	bl	mcount
+ *
+ * These versions have the limitation that in order for the mcount routine to
+ * be able to determine the function's caller's address, an APCS-style frame
+ * pointer (which is set up with something like the code below) is required.
+ *
+ *	mov     ip, sp
+ *	push    {fp, ip, lr, pc}
+ *	sub     fp, ip, #4
+ *
+ * With EABI, these frame pointers are not available unless -mapcs-frame is
+ * specified, and if building as Thumb-2, not even then.
+ *
+ * Newer GCCs (4.4+) solve this problem by introducing a new version of mcount,
+ * with call sites like:
+ *
+ *	push	{lr}
+ *	bl	__gnu_mcount_nc
+ *
+ * With these compilers, frame pointers are not necessary.
+ *
+ * mcount can be thought of as a function called in the middle of a subroutine
+ * call.  As such, it needs to be transparent for both the caller and the
+ * callee: the original lr needs to be restored when leaving mcount, and no
+ * registers should be clobbered.  (In the __gnu_mcount_nc implementation, we
+ * clobber the ip register.  This is OK because the ARM calling convention
+ * allows it to be clobbered in subroutines and doesn't use it to hold
+ * parameters.)
+ *
+ * When using dynamic ftrace, we patch out the mcount call by a "mov r0, r0"
+ * for the mcount case, and a "pop {lr}" for the __gnu_mcount_nc case (see
+ * arch/arm/kernel/ftrace.c).
+ */
 
-ENTRY(mcount)
-	stmdb sp!, {lr}
-	ldr lr, [fp, #-4]
-	ldmia sp!, {pc}
-
-ENTRY(ftrace_caller_gnu)
-	add sp, sp, #4
-	/*
-	* We take advantage of the fact that we build with frame pointers and
-	* -mapcs-frame to combine the ftrace_caller implementations for the
-	* two mcounts with just the above adjustment. This will need to be
-	* revisited if Thumb-2 support is added.
-	*/
-
-ENTRY(ftrace_caller)
-	stmdb sp!, {r0-r3, lr}
-	ldr r1, [fp, #-4]
-	mov r0, lr
-	sub r0, r0, #MCOUNT_INSN_SIZE
-
-#ifdef CONFIG_FUNCTION_GRAPH_TRACER
-	@ FIXTHIS - DYNAMIC_FTRACE does not support function graph tracing
-	@ when the dynamic work is revived, this should be supported as well
+#ifndef CONFIG_OLD_MCOUNT
+#if (__GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 4))
+#error Ftrace requires CONFIG_FRAME_POINTER=y with GCC older than 4.4.0.
+#endif
 #endif
 
-	.globl ftrace_call
+#ifdef CONFIG_DYNAMIC_FTRACE
+ENTRY(__gnu_mcount_nc)
+	mov	ip, lr
+	ldmia	sp!, {lr}
+	mov	pc, ip
+ENDPROC(__gnu_mcount_nc)
+
+ENTRY(ftrace_caller)
+	stmdb	sp!, {r0-r3, lr}
+	mov	r0, lr
+	sub	r0, r0, #MCOUNT_INSN_SIZE
+	ldr	r1, [sp, #20]
+
+	.global	ftrace_call
 ftrace_call:
-	bl ftrace_stub
-	ldr lr, [fp, #-4]			@ restore lr
-	ldmia sp!, {r0-r3, pc}
+	bl	ftrace_stub
+	ldmia	sp!, {r0-r3, ip, lr}
+	mov	pc, ip
+ENDPROC(ftrace_caller)
+
+#ifdef CONFIG_OLD_MCOUNT
+ENTRY(mcount)
+	stmdb	sp!, {lr}
+	ldr	lr, [fp, #-4]
+	ldmia	sp!, {pc}
+ENDPROC(mcount)
+
+ENTRY(ftrace_caller_old)
+	stmdb	sp!, {r0-r3, lr}
+	ldr	r1, [fp, #-4]
+	mov	r0, lr
+	sub	r0, r0, #MCOUNT_INSN_SIZE
+
+	.globl ftrace_call_old
+ftrace_call_old:
+	bl	ftrace_stub
+	ldr	lr, [fp, #-4]			@ restore lr
+	ldmia	sp!, {r0-r3, pc}
+ENDPROC(ftrace_caller_old)
+#endif
 
 #else
 

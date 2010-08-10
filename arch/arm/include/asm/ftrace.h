@@ -2,7 +2,7 @@
 #define _ASM_ARM_FTRACE
 
 #ifdef CONFIG_FUNCTION_TRACER
-#define MCOUNT_ADDR		((long)(mcount))
+#define MCOUNT_ADDR		((unsigned long)(__gnu_mcount_nc))
 #define MCOUNT_INSN_SIZE	4 /* sizeof mcount call */
 
 #ifndef __ASSEMBLY__
@@ -11,7 +11,10 @@ extern void __gnu_mcount_nc(void);
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 struct dyn_arch_ftrace {
-	bool gnu_mcount;
+#ifdef CONFIG_OLD_MCOUNT
+	bool	old_mcount;
+#endif
+ ftrace
 };
 
 static inline unsigned long ftrace_call_adjust(unsigned long addr)
@@ -19,7 +22,8 @@ static inline unsigned long ftrace_call_adjust(unsigned long addr)
 	return addr;
 }
 
-extern void ftrace_caller_gnu(void);
+extern void ftrace_caller_old(void);
+extern void ftrace_call_old(void);
 #endif
 
 #endif
