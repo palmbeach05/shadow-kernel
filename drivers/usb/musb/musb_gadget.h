@@ -107,4 +107,7 @@ extern int musb_gadget_set_halt(struct usb_ep *ep, int value);
 
 extern struct musb *g_musb;
 extern struct usb_gadget *g_gadget;
+
+extern void musb_ep_restart(struct musb *, struct musb_request *);
+
 #endif		/* __MUSB_GADGET_H */
