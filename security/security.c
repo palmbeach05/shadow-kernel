@@ -814,10 +814,9 @@ int security_task_setrlimit(unsigned int resource, struct rlimit *new_rlim)
 	return security_ops->task_setrlimit(resource, new_rlim);
 }
 
-int security_task_setscheduler(struct task_struct *p,
-				int policy, struct sched_param *lp)
+int security_task_setscheduler(struct task_struct *p)
 {
-	return security_ops->task_setscheduler(p, policy, lp);
+	return security_ops->task_setscheduler(p);
 }
 
 int security_task_getscheduler(struct task_struct *p)

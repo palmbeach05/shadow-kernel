@@ -85,7 +85,7 @@ asmlinkage long mipsmt_sys_sched_setaffinity(pid_t pid, unsigned int len,
 		goto out_unlock;
 	}
 
-	retval = security_task_setscheduler(p, 0, NULL);
+	retval = security_task_setscheduler(p)
 	if (retval)
 		goto out_unlock;
 
