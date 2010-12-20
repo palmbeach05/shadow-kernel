@@ -61,64 +61,68 @@ static struct omap_board_config_kernel htcherald_config[] __initdata = {
 
 /* Keyboard definition */
 
-static int htc_herald_keymap[] = {
+static const unsigned int htc_herald_keymap[] = {
 	KEY(0, 0, KEY_RECORD), /* Mail button */
-	KEY(0, 1, KEY_CAMERA), /* Camera */
-	KEY(0, 2, KEY_PHONE), /* Send key */
-	KEY(0, 3, KEY_VOLUMEUP), /* Volume up */
-	KEY(0, 4, KEY_F2),  /* Right bar (landscape) */
-	KEY(0, 5, KEY_MAIL), /* Win key (portrait) */
-	KEY(0, 6, KEY_DIRECTORY), /* Right bar (protrait) */
-	KEY(1, 0, KEY_LEFTCTRL), /* Windows key */
+	KEY(1, 0, KEY_CAMERA), /* Camera */
+	KEY(2, 0, KEY_PHONE), /* Send key */
+	KEY(3, 0, KEY_VOLUMEUP), /* Volume up */
+	KEY(4, 0, KEY_F2),  /* Right bar (landscape) */
+	KEY(5, 0, KEY_MAIL), /* Win key (portrait) */
+	KEY(6, 0, KEY_DIRECTORY), /* Right bar (protrait) */
+	KEY(0, 1, KEY_LEFTCTRL), /* Windows key */
 	KEY(1, 1, KEY_COMMA),
-	KEY(1, 2, KEY_M),
-	KEY(1, 3, KEY_K),
-	KEY(1, 4, KEY_SLASH), /* OK key */
-	KEY(1, 5, KEY_I),
-	KEY(1, 6, KEY_U),
-	KEY(2, 0, KEY_LEFTALT),
-	KEY(2, 1, KEY_TAB),
+	KEY(2, 1, KEY_M),
+	KEY(3, 1, KEY_K),
+	KEY(4, 1, KEY_SLASH), /* OK key */
+	KEY(5, 1, KEY_I),
+	KEY(6, 1, KEY_U),
+	KEY(0, 2, KEY_LEFTALT),
+	KEY(1, 2, KEY_TAB),
 	KEY(2, 2, KEY_N),
-	KEY(2, 3, KEY_J),
-	KEY(2, 4, KEY_ENTER),
-	KEY(2, 5, KEY_H),
-	KEY(2, 6, KEY_Y),
-	KEY(3, 0, KEY_SPACE),
-	KEY(3, 1, KEY_L),
-	KEY(3, 2, KEY_B),
+	KEY(3, 2, KEY_J),
+	KEY(4, 2, KEY_ENTER),
+	KEY(5, 2, KEY_H),
+	KEY(6, 2, KEY_Y),
+	KEY(0, 3, KEY_SPACE),
+	KEY(1, 3, KEY_L),
+	KEY(2, 3, KEY_B),
 	KEY(3, 3, KEY_V),
-	KEY(3, 4, KEY_BACKSPACE),
-	KEY(3, 5, KEY_G),
-	KEY(3, 6, KEY_T),
-	KEY(4, 0, KEY_CAPSLOCK), /* Shift */
-	KEY(4, 1, KEY_C),
-	KEY(4, 2, KEY_F),
-	KEY(4, 3, KEY_R),
+	KEY(4, 3, KEY_BACKSPACE),
+	KEY(5, 3, KEY_G),
+	KEY(6, 3, KEY_T),
+	KEY(0, 4, KEY_CAPSLOCK), /* Shift */
+	KEY(1, 4, KEY_C),
+	KEY(2, 4, KEY_F),
+	KEY(3, 4, KEY_R),
 	KEY(4, 4, KEY_O),
-	KEY(4, 5, KEY_E),
-	KEY(4, 6, KEY_D),
-	KEY(5, 0, KEY_X),
-	KEY(5, 1, KEY_Z),
-	KEY(5, 2, KEY_S),
-	KEY(5, 3, KEY_W),
-	KEY(5, 4, KEY_P),
+	KEY(5, 4, KEY_E),
+	KEY(6, 4, KEY_D),
+	KEY(0, 5, KEY_X),
+	KEY(1, 5, KEY_Z),
+	KEY(2, 5, KEY_S),
+	KEY(3, 5, KEY_W),
+	KEY(4, 5, KEY_P),
 	KEY(5, 5, KEY_Q),
-	KEY(5, 6, KEY_A),
-	KEY(6, 0, KEY_CONNECT), /* Voice button */
-	KEY(6, 2, KEY_CANCEL), /* End key */
-	KEY(6, 3, KEY_VOLUMEDOWN), /* Volume down */
-	KEY(6, 4, KEY_F1), /* Left bar (landscape) */
-	KEY(6, 5, KEY_WWW), /* OK button (portrait) */
+	KEY(6, 5, KEY_A),
+	KEY(0, 6, KEY_CONNECT), /* Voice button */
+	KEY(2, 6, KEY_CANCEL), /* End key */
+	KEY(3, 6, KEY_VOLUMEDOWN), /* Volume down */
+	KEY(4, 6, KEY_F1), /* Left bar (landscape) */
+	KEY(5, 6, KEY_WWW), /* OK button (portrait) */
 	KEY(6, 6, KEY_CALENDAR), /* Left bar (portrait) */
-	0
 };
 
-struct omap_kp_platform_data htcherald_kp_data = {
+static const struct matrix_keymap_data htc_herald_keymap_data = {
+	.keymap		= htc_herald_keymap,
+	.keymap_size	= ARRAY_SIZE(htc_herald_keymap),
+};
+
+static struct omap_kp_platform_data htcherald_kp_data = {
 	.rows	= 7,
 	.cols	= 7,
 	.delay = 20,
-	.rep = 1,
-	.keymap = htc_herald_keymap,
+	.rep = true,
+	.keymap_data = &htc_herald_keymap_data,
 };
 
 static struct resource kp_resources[] = {
@@ -137,6 +141,138 @@ static struct platform_device kp_device = {
 	},
 	.num_resources	= ARRAY_SIZE(kp_resources),
 	.resource	= kp_resources,
+};
+
+/* GPIO buttons for keyboard slide and power button */
+static struct gpio_keys_button herald_gpio_keys_table[] = {
+	{BTN_0,  HTCHERALD_GPIO_POWER, 1, "POWER", EV_KEY, 1, 20},
+	{SW_LID, HTCHERALD_GPIO_SLIDE, 0, "SLIDE", EV_SW,  1, 20},
+
+	{KEY_LEFT,  HTCPLD_GPIO_LEFT_KBD,  1, "LEFT",  EV_KEY, 1, 20},
+	{KEY_RIGHT, HTCPLD_GPIO_RIGHT_KBD, 1, "RIGHT", EV_KEY, 1, 20},
+	{KEY_UP,    HTCPLD_GPIO_UP_KBD,    1, "UP",    EV_KEY, 1, 20},
+	{KEY_DOWN,  HTCPLD_GPIO_DOWN_KBD,  1, "DOWN",  EV_KEY, 1, 20},
+
+	{KEY_LEFT,  HTCPLD_GPIO_LEFT_DPAD,   1, "DLEFT",  EV_KEY, 1, 20},
+	{KEY_RIGHT, HTCPLD_GPIO_RIGHT_DPAD,  1, "DRIGHT", EV_KEY, 1, 20},
+	{KEY_UP,    HTCPLD_GPIO_UP_DPAD,     1, "DUP",    EV_KEY, 1, 20},
+	{KEY_DOWN,  HTCPLD_GPIO_DOWN_DPAD,   1, "DDOWN",  EV_KEY, 1, 20},
+	{KEY_ENTER, HTCPLD_GPIO_ENTER_DPAD,  1, "DENTER", EV_KEY, 1, 20},
+};
+
+static struct gpio_keys_platform_data herald_gpio_keys_data = {
+	.buttons	= herald_gpio_keys_table,
+	.nbuttons	= ARRAY_SIZE(herald_gpio_keys_table),
+	.rep		= true,
+};
+
+static struct platform_device herald_gpiokeys_device = {
+	.name      = "gpio-keys",
+	.id		= -1,
+	.dev = {
+		.platform_data = &herald_gpio_keys_data,
+	},
+};
+
+/* LEDs for the Herald.  These connect to the HTCPLD GPIO device. */
+static struct gpio_led gpio_leds[] = {
+	{"dpad",        NULL, HTCPLD_GPIO_LED_DPAD,        0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"kbd",         NULL, HTCPLD_GPIO_LED_KBD,         0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"vibrate",     NULL, HTCPLD_GPIO_LED_VIBRATE,     0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"green_solid", NULL, HTCPLD_GPIO_LED_GREEN_SOLID, 0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"green_flash", NULL, HTCPLD_GPIO_LED_GREEN_FLASH, 0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"red_solid",   "mmc0", HTCPLD_GPIO_LED_RED_SOLID, 0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"red_flash",   NULL, HTCPLD_GPIO_LED_RED_FLASH,   0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"wifi",        NULL, HTCPLD_GPIO_LED_WIFI,        0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"bt",          NULL, HTCPLD_GPIO_LED_BT,          0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"caps",        NULL, HTCPLD_GPIO_LED_CAPS,        0, 0, LEDS_GPIO_DEFSTATE_OFF},
+	{"alt",         NULL, HTCPLD_GPIO_LED_ALT,         0, 0, LEDS_GPIO_DEFSTATE_OFF},
+};
+
+static struct gpio_led_platform_data gpio_leds_data = {
+	.leds		= gpio_leds,
+	.num_leds	= ARRAY_SIZE(gpio_leds),
+};
+
+static struct platform_device gpio_leds_device = {
+	.name		= "leds-gpio",
+	.id		= 0,
+	.dev	= {
+		.platform_data	= &gpio_leds_data,
+	},
+};
+
+/* HTC PLD chips */
+
+static struct resource htcpld_resources[] = {
+	[0] = {
+		.start  = OMAP_GPIO_IRQ(HTCHERALD_GIRQ_BTNS),
+		.end    = OMAP_GPIO_IRQ(HTCHERALD_GIRQ_BTNS),
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+struct htcpld_chip_platform_data htcpld_chips[] = {
+	[0] = {
+		.addr		= 0x03,
+		.reset		= 0x04,
+		.num_gpios	= 8,
+		.gpio_out_base	= HTCPLD_BASE(0, 0),
+		.gpio_in_base	= HTCPLD_BASE(4, 0),
+	},
+	[1] = {
+		.addr		= 0x04,
+		.reset		= 0x8e,
+		.num_gpios	= 8,
+		.gpio_out_base	= HTCPLD_BASE(1, 0),
+		.gpio_in_base	= HTCPLD_BASE(5, 0),
+	},
+	[2] = {
+		.addr		= 0x05,
+		.reset		= 0x80,
+		.num_gpios	= 8,
+		.gpio_out_base	= HTCPLD_BASE(2, 0),
+		.gpio_in_base	= HTCPLD_BASE(6, 0),
+		.irq_base	= HTCPLD_IRQ(0, 0),
+		.num_irqs	= 8,
+	},
+	[3] = {
+		.addr		= 0x06,
+		.reset		= 0x40,
+		.num_gpios	= 8,
+		.gpio_out_base	= HTCPLD_BASE(3, 0),
+		.gpio_in_base	= HTCPLD_BASE(7, 0),
+		.irq_base	= HTCPLD_IRQ(1, 0),
+		.num_irqs	= 8,
+	},
+};
+
+struct htcpld_core_platform_data htcpld_pfdata = {
+	.int_reset_gpio_hi = HTCPLD_GPIO_INT_RESET_HI,
+	.int_reset_gpio_lo = HTCPLD_GPIO_INT_RESET_LO,
+	.i2c_adapter_id	   = 1,
+
+	.chip		   = htcpld_chips,
+	.num_chip	   = ARRAY_SIZE(htcpld_chips),
+};
+
+static struct platform_device htcpld_device = {
+	.name		= "i2c-htcpld",
+	.id		= -1,
+	.resource	= htcpld_resources,
+	.num_resources	= ARRAY_SIZE(htcpld_resources),
+	.dev	= {
+		.platform_data	= &htcpld_pfdata,
+	},
+};
+
+/* USB Device */
+static struct omap_usb_config htcherald_usb_config __initdata = {
+	.otg = 0,
+	.register_host = 0,
+	.register_dev  = 1,
+	.hmc_mode = 4,
+	.pins[0] = 2,
 };
 
 /* LCD Device resources */
