@@ -246,7 +246,7 @@ void skip_change_remote_baud(unsigned char **ptr, long *len)
 		((struct bts_action *) cur_action)->size;
 
 	if (((struct bts_action *) nxt_action)->type != ACTION_WAIT_EVENT) {
-		pr_err("invalid action after change remote baud command\n");
+		pr_err("invalid action after change remote baud command");
 	} else {
 		*ptr = *ptr + sizeof(struct bts_action) +
 			((struct bts_action *)cur_action)->size;
@@ -310,7 +310,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 				/* ignore remote change
 				 * baud rate HCI VS command */
 				pr_warn("change remote baud"
-				    " rate command in firmware\n");
+				    " rate command in firmware");
 				skip_change_remote_baud(&ptr, &len);
 				break;
 			}
@@ -325,7 +325,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 					st_get_uart_wr_room(kim_gdata->core_data);
 				if (wr_room_space < 0) {
 					pr_err("Unable to get free "
-							"space info from uart tx buffer\n");
+							"space info from uart tx buffer");
 					release_firmware(kim_gdata->fw_entry);
 					return wr_room_space;
 				}
@@ -336,7 +336,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			/* Timeout happened ? */
 			if (time_after_eq(jiffies, timeout)) {
 				pr_err("Timeout while waiting for free "
-						"free space in uart tx buffer\n");
+						"free space in uart tx buffer");
 				release_firmware(kim_gdata->fw_entry);
 				return -ETIMEDOUT;
 			}
@@ -364,7 +364,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			if (err != cmd_size) {
 				pr_err("Number of bytes written to uart "
 						"tx buffer are not matching with "
-						"requested cmd write size\n");
+						"requested cmd write size");
 				release_firmware(kim_gdata->fw_entry);
 				return -EIO;
 			}
@@ -374,7 +374,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			if (!wait_for_completion_timeout
 					(&kim_gdata->kim_rcvd,
 					 msecs_to_jiffies(CMD_RESP_TIME))) {
-				pr_err("response timeout during fw download \n");
+				pr_err("response timeout during fw download ");
 				/* timed out */
 				release_firmware(kim_gdata->fw_entry);
 				return -ETIMEDOUT;
