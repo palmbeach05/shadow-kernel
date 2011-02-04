@@ -743,7 +743,7 @@ static int kim_probe(struct platform_device *pdev)
 	/* Configure nShutdown GPIO as output=0 */
 	status = gpio_direction_output(kim_gdata->nshutdown, 0);
 	if (unlikely(status)) {
-		pr_err(" unable to configure gpio %ld\n", kim_gdata->nshutdown);
+		pr_err(" unable to configure gpio %ld", kim_gdata->nshutdown);
 		return status;
 	}
 	/* get reference of pdev for request_firmware
@@ -791,11 +791,11 @@ static int kim_remove(struct platform_device *pdev)
 	 * nShutdown gpio from the system
 	 */
 	gpio_free(pdata->nshutdown_gpio);
-	pr_info("nshutdown GPIO Freed\n");
+	pr_info("nshutdown GPIO Freed");
 
 	debugfs_remove_recursive(kim_debugfs_dir);
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
-	pr_info("sysfs entries removed\n");
+	pr_info("sysfs entries removed");
 
 	kim_gdata->kim_pdev = NULL;
 	st_core_exit(kim_gdata->core_data);
