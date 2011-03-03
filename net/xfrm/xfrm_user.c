@@ -484,9 +484,9 @@ static int xfrm_add_sa(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct xfrm_state *x;
 	int err;
 	struct km_event c;
-	uid_t loginuid = NETLINK_CB(skb).loginuid;
-	u32 sessionid = NETLINK_CB(skb).sessionid;
-	u32 sid = NETLINK_CB(skb).sid;
+	uid_t loginuid = audit_get_loginuid(current);
+	u32 sessionid = audit_get_sessionid(current);
+	u32 sid;
 
 	err = verify_newsa_info(p, attrs);
 	if (err)
@@ -502,6 +502,7 @@ static int xfrm_add_sa(struct sk_buff *skb, struct nlmsghdr *nlh,
 	else
 		err = xfrm_state_update(x);
 
+	security_task_getsecid(current, &sid);
 	xfrm_audit_state_add(x, err ? 0 : 1, loginuid, sessionid, sid);
 
 	if (err < 0) {
@@ -559,9 +560,9 @@ static int xfrm_del_sa(struct sk_buff *skb, struct nlmsghdr *nlh,
 	int err = -ESRCH;
 	struct km_event c;
 	struct xfrm_usersa_id *p = nlmsg_data(nlh);
-	uid_t loginuid = NETLINK_CB(skb).loginuid;
-	u32 sessionid = NETLINK_CB(skb).sessionid;
-	u32 sid = NETLINK_CB(skb).sid;
+	uid_t loginuid = audit_get_loginuid(current);
+	u32 sessionid = audit_get_sessionid(current);
+	u32 sid;
 
 	x = xfrm_user_state_lookup(net, p, attrs, &err);
 	if (x == NULL)
@@ -586,6 +587,7 @@ static int xfrm_del_sa(struct sk_buff *skb, struct nlmsghdr *nlh,
 	km_state_notify(x, &c);
 
 out:
+	security_task_getsecid(current, &sid);
 	xfrm_audit_state_delete(x, err ? 0 : 1, loginuid, sessionid, sid);
 	xfrm_state_put(x);
 	return err;
@@ -1235,9 +1237,9 @@ static int xfrm_add_policy(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct km_event c;
 	int err;
 	int excl;
-	uid_t loginuid = NETLINK_CB(skb).loginuid;
-	u32 sessionid = NETLINK_CB(skb).sessionid;
-	u32 sid = NETLINK_CB(skb).sid;
+	uid_t loginuid = audit_get_loginuid(current);
+	u32 sessionid = audit_get_sessionid(current);
+	u32 sid;
 
 	err = verify_newpolicy_info(p);
 	if (err)
@@ -1256,6 +1258,7 @@ static int xfrm_add_policy(struct sk_buff *skb, struct nlmsghdr *nlh,
 	 * a type XFRM_MSG_UPDPOLICY - JHS */
 	excl = nlh->nlmsg_type == XFRM_MSG_NEWPOLICY;
 	err = xfrm_policy_insert(p->dir, xp, excl);
+	security_task_getsecid(current, &sid);
 	xfrm_audit_policy_add(xp, err ? 0 : 1, loginuid, sessionid, sid);
 
 	if (err) {
@@ -1487,10 +1490,11 @@ static int xfrm_get_policy(struct sk_buff *skb, struct nlmsghdr *nlh,
 					    NETLINK_CB(skb).pid);
 		}
 	} else {
-		uid_t loginuid = NETLINK_CB(skb).loginuid;
-		u32 sessionid = NETLINK_CB(skb).sessionid;
-		u32 sid = NETLINK_CB(skb).sid;
+		uid_t loginuid = audit_get_loginuid(current);
+		u32 sessionid = audit_get_sessionid(current);
+		u32 sid;
 
+		security_task_getsecid(current, &sid);
 		xfrm_audit_policy_delete(xp, err ? 0 : 1, loginuid, sessionid,
 					 sid);
 
@@ -1518,9 +1522,9 @@ static int xfrm_flush_sa(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct xfrm_audit audit_info;
 	int err;
 
-	audit_info.loginuid = NETLINK_CB(skb).loginuid;
-	audit_info.sessionid = NETLINK_CB(skb).sessionid;
-	audit_info.secid = NETLINK_CB(skb).sid;
+	audit_info.loginuid = audit_get_loginuid(current);
+	audit_info.sessionid = audit_get_sessionid(current);
+	security_task_getsecid(current, &audit_info.secid);
 	err = xfrm_state_flush(net, p->proto, &audit_info);
 	if (err)
 		return err;
@@ -1670,9 +1674,9 @@ static int xfrm_flush_policy(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err)
 		return err;
 
-	audit_info.loginuid = NETLINK_CB(skb).loginuid;
-	audit_info.sessionid = NETLINK_CB(skb).sessionid;
-	audit_info.secid = NETLINK_CB(skb).sid;
+	audit_info.loginuid = audit_get_loginuid(current);
+	audit_info.sessionid = audit_get_sessionid(current);
+	security_task_getsecid(current, &audit_info.secid);
 	err = xfrm_policy_flush(net, type, &audit_info);
 	if (err)
 		return err;
@@ -1732,9 +1736,11 @@ static int xfrm_add_pol_expire(struct sk_buff *skb, struct nlmsghdr *nlh,
 	read_unlock(&xp->lock);
 	err = 0;
 	if (up->hard) {
-		uid_t loginuid = NETLINK_CB(skb).loginuid;
-		uid_t sessionid = NETLINK_CB(skb).sessionid;
-		u32 sid = NETLINK_CB(skb).sid;
+		uid_t loginuid = audit_get_loginuid(current);
+		u32 sessionid = audit_get_sessionid(current);
+		u32 sid;
+
+		security_task_getsecid(current, &sid);
 		xfrm_policy_delete(xp, p->dir);
 		xfrm_audit_policy_delete(xp, 1, loginuid, sessionid, sid);
 
@@ -1771,9 +1777,11 @@ static int xfrm_add_sa_expire(struct sk_buff *skb, struct nlmsghdr *nlh,
 	km_state_expired(x, ue->hard, current->pid);
 
 	if (ue->hard) {
-		uid_t loginuid = NETLINK_CB(skb).loginuid;
-		uid_t sessionid = NETLINK_CB(skb).sessionid;
-		u32 sid = NETLINK_CB(skb).sid;
+		uid_t loginuid = audit_get_loginuid(current);
+		u32 sessionid = audit_get_sessionid(current);
+		u32 sid;
+
+		security_task_getsecid(current, &sid);
 		__xfrm_state_delete(x);
 		xfrm_audit_state_delete(x, 1, loginuid, sessionid, sid);
 	}
