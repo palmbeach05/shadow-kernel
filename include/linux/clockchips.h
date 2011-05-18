@@ -70,6 +70,8 @@ enum clock_event_nofitiers {
  * @event_handler:	Assigned by the framework to be called by the low
  *			level handler of the event source
  * @broadcast:		function to broadcast events
+ * @min_delta_ticks:	minimum delta value in ticks stored for reconfiguration
+ * @max_delta_ticks:	maximum delta value in ticks stored for reconfiguration
  * @list:		list head for the management code
  * @mode:		operating mode assigned by the management code
  * @next_event:		local storage for the next event in oneshot mode
@@ -82,6 +84,10 @@ struct clock_event_device {
 	u64			min_delta_ns;
 	u32			mult;
 	u32			shift;
+
+	unsigned long		min_delta_ticks;
+	unsigned long		max_delta_ticks;
+
 	int			rating;
 	int			irq;
 	const struct cpumask	*cpumask;
@@ -121,6 +127,10 @@ static inline unsigned long div_sc(unsigned long ticks, unsigned long nsec,
 extern u64 clockevent_delta2ns(unsigned long latch,
 			       struct clock_event_device *evt);
 extern void clockevents_register_device(struct clock_event_device *dev);
+
+extern void clockevents_config_and_register(struct clock_event_device *dev,
+					    u32 freq, unsigned long min_delta,
+					    unsigned long max_delta);
 
 extern void clockevents_exchange_device(struct clock_event_device *old,
 					struct clock_event_device *new);
