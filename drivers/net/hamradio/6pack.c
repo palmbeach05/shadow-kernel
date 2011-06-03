@@ -454,7 +454,7 @@ out:
  * a block of 6pack data has been received, which can now be decapsulated
  * and sent on to some IP layer for further processing.
  */
-static unsigned int sixpack_receive_buf(struct tty_struct *tty,
+static void sixpack_receive_buf(struct tty_struct *tty,
 	const unsigned char *cp, char *fp, int count)
 {
 	struct sixpack *sp;
@@ -462,11 +462,11 @@ static unsigned int sixpack_receive_buf(struct tty_struct *tty,
 	int count1;
 
 	if (!count)
-		return 0;
+		return;
 
 	sp = sp_get(tty);
 	if (!sp)
-		return -ENODEV;
+		return;
 
 	memcpy(buf, cp, count < sizeof(buf) ? count : sizeof(buf));
 
@@ -485,8 +485,6 @@ static unsigned int sixpack_receive_buf(struct tty_struct *tty,
 
 	sp_put(sp);
 	tty_unthrottle(tty);
-
-	return count1;
 }
 
 /*
