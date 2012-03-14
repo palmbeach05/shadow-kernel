@@ -391,8 +391,11 @@ EXPORT_SYMBOL(timekeeping_inject_offset);
 static int change_clocksource(void *data)
 {
 	struct clocksource *new, *old;
+	unsigned long flags;
 
 	new = (struct clocksource *) data;
+
+	write_seqlock_irqsave(&xtime_lock, flags);
 
 	timekeeping_forward_now();
 	if (!new->enable || new->enable(new) == 0) {
@@ -401,6 +404,10 @@ static int change_clocksource(void *data)
 		if (old->disable)
 			old->disable(old);
 	}
+	update_vsyscall(&xtime, timekeeper.clock, timekeeper.mult);
+
+	write_sequnlock_irqrestore(&xtime_lock, flags);
+
 	return 0;
 }
 
