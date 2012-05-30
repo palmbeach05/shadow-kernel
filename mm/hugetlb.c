@@ -2539,7 +2539,8 @@ int hugetlb_reserve_pages(struct inode *inode,
 	goto end;
 
 out_err:
-	resv_map_put(vma);
+	if (vma)
+		resv_map_put(vma);
 end:
 	trace_hugetlb_pages_reserve(inode, from, to, ret);
 	return ret;
