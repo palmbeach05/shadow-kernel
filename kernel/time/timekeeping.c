@@ -26,8 +26,7 @@ struct timekeeper {
 	/* Current clocksource used for timekeeping. */
 	struct clocksource *clock;
 	/* The shift value of the current clocksource. */
-	int	shift;
-
+	u32			shift;
 	/* Number of clock cycles in one NTP interval. */
 	cycle_t cycle_interval;
 	/* Number of clock shifted nano seconds in one NTP interval. */
@@ -44,7 +43,7 @@ struct timekeeper {
 	s64	ntp_error;
 	/* Shift conversion between clock shifted nano seconds and
 	 * ntp shifted nano seconds. */
-	int	ntp_error_shift;
+	u32			ntp_error_shift;
 	/* NTP adjusted clock multiplier */
 	u32	mult;
 };
@@ -870,7 +869,7 @@ static void timekeeping_adjust(s64 offset)
  *
  * Returns the unconsumed cycles.
  */
-static cycle_t logarithmic_accumulation(cycle_t offset, int shift)
+static cycle_t logarithmic_accumulation(cycle_t offset, u32 shift)
 {
 	u64 nsecps = (u64)NSEC_PER_SEC << timekeeper.shift;
 	u64 raw_nsecs;
