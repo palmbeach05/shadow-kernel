@@ -888,6 +888,7 @@ static cycle_t logarithmic_accumulation(cycle_t offset, u32 shift)
 		xtime.tv_sec++;
 		leap = second_overflow(xtime.tv_sec);
 		xtime.tv_sec += leap;
+		wall_to_monotonic.tv_sec -= leap;
 	}
 
 	/* Accumulate raw time */
@@ -1001,6 +1002,7 @@ static void update_wall_time(void)
 		xtime.tv_nsec -= NSEC_PER_SEC;
 		xtime.tv_sec++;
 		leap = second_overflow(xtime.tv_sec);
+		wall_to_monotonic.tv_sec -= leap;
 	}
 
 	/* check to see if there is a new clocksource to use */
