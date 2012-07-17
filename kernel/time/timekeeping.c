@@ -168,14 +168,6 @@ static struct timespec raw_time;
 /* flag for if timekeeping is suspended */
 int __read_mostly timekeeping_suspended;
 
-/* must hold xtime_lock */
-void timekeeping_leap_insert(int leapsecond)
-{
-	xtime.tv_sec += leapsecond;
-	wall_to_monotonic.tv_sec -= leapsecond;
-	update_vsyscall(&xtime, timekeeper.clock, timekeeper.mult);
-}
-
 #ifdef CONFIG_GENERIC_TIME
 
 /**
@@ -890,9 +882,12 @@ static cycle_t logarithmic_accumulation(cycle_t offset, u32 shift)
 
 	timekeeper.xtime_nsec += timekeeper.xtime_interval << shift;
 	while (timekeeper.xtime_nsec >= nsecps) {
+		int leap;
+
 		timekeeper.xtime_nsec -= nsecps;
 		xtime.tv_sec++;
-		second_overflow();
+		leap = second_overflow(xtime.tv_sec);
+		xtime.tv_sec += leap;
 	}
 
 	/* Accumulate raw time */
@@ -1001,9 +996,11 @@ static void update_wall_time(void)
 	 * xtime.tv_nsec isn't larger then NSEC_PER_SEC
 	 */
 	if (unlikely(xtime.tv_nsec >= NSEC_PER_SEC)) {
+		int leap;
+
 		xtime.tv_nsec -= NSEC_PER_SEC;
 		xtime.tv_sec++;
-		second_overflow();
+		leap = second_overflow(xtime.tv_sec);
 	}
 
 	/* check to see if there is a new clocksource to use */
