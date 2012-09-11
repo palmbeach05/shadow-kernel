@@ -224,14 +224,17 @@ void getnstimeofday(struct timespec *ts)
 	do {
 		seq = read_seqbegin(&xtime_lock);
 
-		*ts = xtime;
+		ts->tv_sec = xtime.tv_sec;
 		nsecs = timekeeping_get_ns();
 
 		/* If arch requires, add in gettimeoffset() */
 		nsecs += arch_gettimeoffset();
 
+		nsecs += xtime.tv_nsec;
+
 	} while (read_seqretry(&xtime_lock, seq));
 
+	ts->tv_nsec = 0;
 	timespec_add_ns(ts, nsecs);
 }
 EXPORT_SYMBOL(getnstimeofday);
@@ -278,16 +281,19 @@ void ktime_get_ts(struct timespec *ts)
 
 	do {
 		seq = read_seqbegin(&xtime_lock);
-		*ts = xtime;
+		ts->tv_sec = xtime.tv_sec;
 		tomono = wall_to_monotonic;
 		nsecs = timekeeping_get_ns();
 		/* If arch requires, add in gettimeoffset() */
 		nsecs += arch_gettimeoffset();
 
+		nsecs += xtime.tv_nsec;
+
 	} while (read_seqretry(&xtime_lock, seq));
 
-	set_normalized_timespec(ts, ts->tv_sec + tomono.tv_sec,
-				ts->tv_nsec + tomono.tv_nsec + nsecs);
+	ts->tv_sec += tomono.tv_sec;
+	ts->tv_nsec = 0;
+	timespec_add_ns(ts, nsecs + tomono.tv_nsec);
 }
 EXPORT_SYMBOL_GPL(ktime_get_ts);
 
@@ -933,7 +939,7 @@ static void update_wall_time(void)
 	timekeeper.xtime_nsec = (s64)xtime.tv_nsec << timekeeper.shift;
 
 	/* Check if there's really nothing to do */
-	if (unlikely(timekeeping_suspended))
+	if (offset < timekeeper.cycle_interval)
 		return;
 
 	/*
@@ -1046,15 +1052,18 @@ void get_monotonic_boottime(struct timespec *ts)
 
 	do {
 		seq = read_seqbegin(&xtime_lock);
-		*ts = xtime;
+		ts->tv_sec = xtime.tv_sec;
 		tomono = wall_to_monotonic;
 		sleep = total_sleep_time;
 		nsecs = timekeeping_get_ns();
 
+		nsecs += xtime.tv_nsec;
+
 	} while (read_seqretry(&xtime_lock, seq));
 
-	set_normalized_timespec(ts, ts->tv_sec + tomono.tv_sec + sleep.tv_sec,
-			ts->tv_nsec + tomono.tv_nsec + sleep.tv_nsec + nsecs);
+	ts->tv_sec += tomono.tv_sec + sleep.tv_sec;
+	ts->tv_nsec = 0;
+	timespec_add_ns(ts, nsecs + tomono.tv_nsec + sleep.tv_nsec);
 }
 EXPORT_SYMBOL_GPL(get_monotonic_boottime);
 
