@@ -1416,6 +1416,20 @@ static struct sysdev_driver cpufreq_sysdev_driver = {
 	.resume		= cpufreq_resume,
 };
 
+/**
+ *	cpufreq_get_current_driver - return current driver's name
+ *
+ *	Return the name string of the currently loaded cpufreq driver
+ *	or NULL, if none.
+ */
+const char *cpufreq_get_current_driver(void)
+{
+	if (cpufreq_driver)
+		return cpufreq_driver->name;
+
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(cpufreq_get_current_driver);
 
 /*********************************************************************
  *                     NOTIFIER LISTS INTERFACE                      *
