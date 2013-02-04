@@ -81,10 +81,6 @@ static int lock_policy_rwsem_##mode					\
 	int policy_cpu = per_cpu(cpufreq_policy_cpu, cpu);		\
 	BUG_ON(policy_cpu == -1);					\
 	down_##mode(&per_cpu(cpu_policy_rwsem, policy_cpu));		\
-	if (unlikely(!cpu_online(cpu))) {				\
-		up_##mode(&per_cpu(cpu_policy_rwsem, policy_cpu));	\
-		return -1;						\
-	}								\
 									\
 	return 0;							\
 }
@@ -714,8 +710,6 @@ static int cpufreq_add_dev_symlink(unsigned int cpu,
 
 		if (j == cpu)
 			continue;
-		if (!cpu_online(j))
-			continue;
 
 		pr_debug("CPU %u already managed, adding link\n", j);
 		managed_policy = cpufreq_cpu_get(cpu);
@@ -772,8 +766,6 @@ static int cpufreq_add_dev_interface(unsigned int cpu,
 
 	spin_lock_irqsave(&cpufreq_driver_lock, flags);
 	for_each_cpu(j, policy->cpus) {
-		if (!cpu_online(j))
-			continue;
 		per_cpu(cpufreq_cpu_data, j) = policy;
 		per_cpu(cpufreq_policy_cpu, j) = policy->cpu;
 	}
@@ -993,7 +985,6 @@ nomem_out:
 module_out:
 	return ret;
 }
-
 
 /**
  * __cpufreq_remove_dev - remove a CPU device
@@ -1496,7 +1487,7 @@ int __cpufreq_driver_target(struct cpufreq_policy *policy,
 	if (target_freq == policy->cur)
 		return 0;
 
-	if (cpu_online(policy->cpu) && cpufreq_driver->target)
+	if (cpufreq_driver->target)
 		retval = cpufreq_driver->target(policy, target_freq, relation);
 
 	return retval;
@@ -1534,7 +1525,7 @@ int __cpufreq_driver_getavg(struct cpufreq_policy *policy, unsigned int cpu)
 	if (cpufreq_disabled())
 		return ret;
 
-	if (!(cpu_online(cpu) && cpufreq_driver->getavg))
+	if (!cpufreq_driver->getavg)
 		return 0;
 
 	policy = cpufreq_cpu_get(policy->cpu);
