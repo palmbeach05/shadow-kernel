@@ -64,8 +64,6 @@ static DEFINE_SPINLOCK(cpufreq_driver_lock);
  *   mode before doing so.
  *
  * Additional rules:
- * - All holders of the lock should check to make sure that the CPU they
- *   are concerned with are online after they get the lock.
  * - Governor routines that can be called in cpufreq hotplug path should not
  *   take this sem as top level hotplug notifier handler takes this.
  * - Lock should not be held across
@@ -75,8 +73,7 @@ static DEFINE_PER_CPU(int, cpufreq_policy_cpu);
 static DEFINE_PER_CPU(struct rw_semaphore, cpu_policy_rwsem);
 
 #define lock_policy_rwsem(mode, cpu)					\
-static int lock_policy_rwsem_##mode					\
-(int cpu)								\
+static int lock_policy_rwsem_##mode(int cpu)				\
 {									\
 	int policy_cpu = per_cpu(cpufreq_policy_cpu, cpu);		\
 	BUG_ON(policy_cpu == -1);					\
@@ -86,23 +83,18 @@ static int lock_policy_rwsem_##mode					\
 }
 
 lock_policy_rwsem(read, cpu);
-
 lock_policy_rwsem(write, cpu);
 
-static void unlock_policy_rwsem_read(int cpu)
-{
-	int policy_cpu = per_cpu(cpufreq_policy_cpu, cpu);
-	BUG_ON(policy_cpu == -1);
-	up_read(&per_cpu(cpu_policy_rwsem, policy_cpu));
+#define unlock_policy_rwsem(mode, cpu)					\
+static void unlock_policy_rwsem_##mode(int cpu)				\
+{									\
+	int policy_cpu = per_cpu(cpufreq_policy_cpu, cpu);		\
+	BUG_ON(policy_cpu == -1);					\
+	up_##mode(&per_cpu(cpu_policy_rwsem, policy_cpu));		\
 }
 
-static void unlock_policy_rwsem_write(int cpu)
-{
-	int policy_cpu = per_cpu(cpufreq_policy_cpu, cpu);
-	BUG_ON(policy_cpu == -1);
-	up_write(&per_cpu(cpu_policy_rwsem, policy_cpu));
-}
-
+unlock_policy_rwsem(read, cpu);
+unlock_policy_rwsem(write, cpu);
 
 /* internal prototypes */
 static int __cpufreq_governor(struct cpufreq_policy *policy,
@@ -259,6 +251,7 @@ static inline void adjust_jiffies(unsigned long val, struct cpufreq_freqs *ci)
 void cpufreq_notify_transition(struct cpufreq_freqs *freqs, unsigned int state)
 {
 	struct cpufreq_policy *policy;
+	unsigned long flags;
 
 	BUG_ON(irqs_disabled());
 
@@ -269,7 +262,10 @@ void cpufreq_notify_transition(struct cpufreq_freqs *freqs, unsigned int state)
 	pr_debug("notification %u of frequency transition to %u kHz\n",
 		state, freqs->new);
 
+	spin_lock_irqsave(&cpufreq_driver_lock, flags);
 	policy = per_cpu(cpufreq_cpu_data, freqs->cpu);
+	spin_unlock_irqrestore(&cpufreq_driver_lock, flags);
+
 	switch (state) {
 
 	case CPUFREQ_PRECHANGE:
@@ -808,21 +804,21 @@ static int cpufreq_add_policy_cpu(unsigned int cpu, unsigned int sibling,
 	policy = cpufreq_cpu_get(sibling);
 	WARN_ON(!policy);
 
-	per_cpu(cpufreq_policy_cpu, cpu) = policy->cpu;
-
-	lock_policy_rwsem_write(cpu);
-
 	__cpufreq_governor(policy, CPUFREQ_GOV_STOP);
 
+	lock_policy_rwsem_write(sibling);
+
 	spin_lock_irqsave(&cpufreq_driver_lock, flags);
+
 	cpumask_set_cpu(cpu, policy->cpus);
+	per_cpu(cpufreq_policy_cpu, cpu) = policy->cpu;
 	per_cpu(cpufreq_cpu_data, cpu) = policy;
 	spin_unlock_irqrestore(&cpufreq_driver_lock, flags);
 
+	unlock_policy_rwsem_write(sibling);
+
 	__cpufreq_governor(policy, CPUFREQ_GOV_START);
 	__cpufreq_governor(policy, CPUFREQ_GOV_LIMITS);
-
-	unlock_policy_rwsem_write(cpu);
 
 	ret = sysfs_create_link(&dev->kobj, &policy->kobj, "cpufreq");
 	if (ret) {
@@ -871,11 +867,15 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 
 #ifdef CONFIG_HOTPLUG_CPU
 	/* Check if this cpu was hot-unplugged earlier and has siblings */
+	spin_lock_irqsave(&cpufreq_driver_lock, flags);
 	for_each_online_cpu(sibling) {
 		struct cpufreq_policy *cp = per_cpu(cpufreq_cpu_data, sibling);
-		if (cp && cpumask_test_cpu(cpu, cp->related_cpus))
+		if (cp && cpumask_test_cpu(cpu, cp->related_cpus)) {
+			spin_unlock_irqrestore(&cpufreq_driver_lock, flags);
 			return cpufreq_add_policy_cpu(cpu, sibling, dev);
+		}
 	}
+	spin_unlock_irqrestore(&cpufreq_driver_lock, flags);
 #endif
 #endif
 
@@ -900,8 +900,6 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 
 	/* Initially set CPU itself as the policy_cpu */
 	per_cpu(cpufreq_policy_cpu, cpu) = cpu;
-	ret = (lock_policy_rwsem_write(cpu) < 0);
-	WARN_ON(ret);
 
 	init_completion(&policy->kobj_unregister);
 	INIT_WORK(&policy->update, handle_update);
@@ -912,7 +910,7 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 	ret = cpufreq_driver->init(policy);
 	if (ret) {
 		pr_debug("initialization failed\n");
-		goto err_unlock_policy;
+		goto err_set_policy_cpu;
 	}
 
 	/* related cpus should atleast have policy->cpus */
@@ -943,8 +941,6 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 	if (ret)
 		goto err_out_unregister;
 
-	unlock_policy_rwsem_write(cpu);
-
 	kobject_uevent(&policy->kobj, KOBJ_ADD);
 	module_put(cpufreq_driver->owner);
 	pr_debug("initialization complete\n");
@@ -960,8 +956,8 @@ err_out_unregister:
 	kobject_put(&policy->kobj);
 	wait_for_completion(&policy->kobj_unregister);
 
-err_unlock_policy:
-	unlock_policy_rwsem_write(cpu);
+err_set_policy_cpu:
+	per_cpu(cpufreq_policy_cpu, cpu) = -1;
 	free_cpumask_var(policy->related_cpus);
 err_free_cpumask:
 	free_cpumask_var(policy->cpus);
@@ -1013,12 +1009,14 @@ static int __cpufreq_remove_dev(struct sys_device *sys_dev)
 	pr_debug("%s: unregistering CPU %u\n", __func__, cpu);
 
 	spin_lock_irqsave(&cpufreq_driver_lock, flags);
+
 	data = per_cpu(cpufreq_cpu_data, cpu);
+	per_cpu(cpufreq_cpu_data, cpu) = NULL;
+
+	spin_unlock_irqrestore(&cpufreq_driver_lock, flags);
 
 	if (!data) {
 		pr_debug("%s: No cpu_data found\n", __func__);
-		spin_unlock_irqrestore(&cpufreq_driver_lock, flags);
-		unlock_policy_rwsem_write(cpu);
 		return -EINVAL;
 	}
 
@@ -1089,6 +1087,7 @@ static int __cpufreq_remove_dev(struct sys_device *sys_dev)
 		__cpufreq_governor(data, CPUFREQ_GOV_LIMITS);
 	}
 
+	per_cpu(cpufreq_policy_cpu, cpu) = -1;
 	return 0;
 }
 
@@ -1100,9 +1099,6 @@ static int cpufreq_remove_dev(struct sys_device *sys_dev)
 
 	if (cpu_is_offline(cpu))
 		return 0;
-
-	if (unlikely(lock_policy_rwsem_write(cpu)))
-		BUG();
 
 	retval = __cpufreq_remove_dev(sys_dev);
 	return retval;
@@ -1799,9 +1795,6 @@ static int __cpuinit cpufreq_cpu_callback(struct notifier_block *nfb,
 			break;
 		case CPU_DOWN_PREPARE:
 		case CPU_DOWN_PREPARE_FROZEN:
-			if (unlikely(lock_policy_rwsem_write(cpu)))
-				BUG();
-
 			__cpufreq_remove_dev(sys_dev);
 			break;
 		case CPU_DOWN_FAILED:
