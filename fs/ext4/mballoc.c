@@ -2074,7 +2074,11 @@ repeat:
 		for (i = 0; i < ngroups; group++, i++) {
 			struct ext4_group_info *grp;
 
-			if (group == ngroups)
+			/*
+			 * Artificially restricted ngroups for non-extent
+			 * files makes group > ngroups possible on first loop.
+			 */
+			if (group >= ngroups)
 				group = 0;
 
 			/* This now checks without needing the buddy page */
