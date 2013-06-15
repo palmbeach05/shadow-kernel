@@ -1353,8 +1353,8 @@ static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 			      const char *fp, size_t count)
 {
 	const unsigned char *p;
-	char *f, flags = TTY_NORMAL;
-	int	i;
+	const char *f;
+	char flags = TTY_NORMAL;
 	char	buf[64];
 	unsigned long cpuflags;
 
@@ -1362,24 +1362,29 @@ static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 		return;
 
 	if (tty->real_raw) {
+		size_t n, head;
 		spin_lock_irqsave(&tty->read_lock, cpuflags);
-		i = min(N_TTY_BUF_SIZE - tty->read_cnt,
-			N_TTY_BUF_SIZE - tty->read_head);
-		i = min(count, i);
-		memcpy(tty->read_buf + tty->read_head, cp, i);
-		tty->read_head = (tty->read_head + i) & (N_TTY_BUF_SIZE-1);
-		tty->read_cnt += i;
-		cp += i;
-		count -= i;
 
-		i = min(N_TTY_BUF_SIZE - tty->read_cnt,
-			N_TTY_BUF_SIZE - tty->read_head);
-		i = min(count, i);
-		memcpy(tty->read_buf + tty->read_head, cp, i);
-		tty->read_head = (tty->read_head + i) & (N_TTY_BUF_SIZE-1);
-		tty->read_cnt += i;
+		head = tty->read_head & (N_TTY_BUF_SIZE - 1);
+		n = N_TTY_BUF_SIZE - max((size_t)tty->read_cnt, head);
+		n = min_t(size_t, count, n);
+
+		memcpy(tty->read_buf + head, cp, n);
+		tty->read_head = (tty->read_head + n) & (N_TTY_BUF_SIZE-1);
+		tty->read_cnt += n;
+		cp += n;
+		count -= n;
+
+		head = tty->read_head & (N_TTY_BUF_SIZE -1);
+		n = N_TTY_BUF_SIZE - max((size_t)tty->read_cnt, head);
+		n = min_t(size_t, count, n);
+
+		memcpy(tty->read_buf + head, cp, n);
+		tty->read_head = (tty->read_head + n) & (N_TTY_BUF_SIZE-1);
+		tty->read_cnt += n;
 		spin_unlock_irqrestore(&tty->read_lock, cpuflags);
 	} else {
+		int i;
 		for (i = count, p = cp, f = fp; i; i--, p++) {
 			if (f)
 				flags = *f++;
@@ -2014,7 +2019,7 @@ break_out:
  */
 
 static unsigned int n_tty_poll(struct tty_struct *tty, struct file *file,
-							struct poll_table *wait)
+								poll_table *wait)
 {
 	unsigned int mask = 0;
 
