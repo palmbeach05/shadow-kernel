@@ -1063,15 +1063,11 @@ static int __cpufreq_remove_dev(struct sys_device *sys_dev)
 				__func__, cpu_sys_dev->id, cpu);
 	}
 
-	if ((cpus == 1) && (cpufreq_driver->target))
-		__cpufreq_governor(data, CPUFREQ_GOV_POLICY_EXIT);
-
-	pr_debug("%s: removing link, cpu: %d\n", __func__, cpu);
-	cpufreq_cpu_put(data);
-	unlock_policy_rwsem_write(cpu);
-
 	/* If cpu is last user of policy, free policy */
 	if (cpus == 1) {
+		if (cpufreq_driver->target)
+			__cpufreq_governor(data, CPUFREQ_GOV_POLICY_EXIT);
+
 		lock_policy_rwsem_write(cpu);
 		kobj = &data->kobj;
 		cmp = &data->kobj_unregister;
@@ -1094,9 +1090,14 @@ static int __cpufreq_remove_dev(struct sys_device *sys_dev)
 		free_cpumask_var(data->related_cpus);
 		free_cpumask_var(data->cpus);
 		kfree(data);
-	} else if (cpufreq_driver->target) {
-		__cpufreq_governor(data, CPUFREQ_GOV_START);
-		__cpufreq_governor(data, CPUFREQ_GOV_LIMITS);
+	} else {
+		pr_debug("%s: removing link, cpu: %d\n", __func__, cpu);
+		cpufreq_cpu_put(data);
+		unlock_policy_rwsem_write(cpu);
+		if (cpufreq_driver->target) {
+			__cpufreq_governor(data, CPUFREQ_GOV_START);
+			__cpufreq_governor(data, CPUFREQ_GOV_LIMITS);
+		}
 	}
 
 	per_cpu(cpufreq_policy_cpu, cpu) = -1;
