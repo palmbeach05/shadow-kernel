@@ -20,6 +20,12 @@ struct ftrace_ret_stack {
  * Defined in entry.S
  */
 extern void return_to_handler(void);
+
+
+extern unsigned long return_address(unsigned int);
+
+#define ftrace_return_address(n) return_address(n)
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_PARISC_FTRACE_H */

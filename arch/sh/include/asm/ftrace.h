@@ -35,4 +35,13 @@ static inline unsigned long ftrace_call_adjust(unsigned long addr)
 #endif /* __ASSEMBLY__ */
 #endif /* CONFIG_FUNCTION_TRACER */
 
+#ifndef __ASSEMBLY__
+
+/* arch/sh/kernel/return_address.c */
+extern void *return_address(unsigned int);
+
+#define ftrace_return_address(n) return_address(n)
+
+#endif /* __ASSEMBLY__ */
+
 #endif /* __ASM_SH_FTRACE_H */
