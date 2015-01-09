@@ -792,7 +792,7 @@ int kim_suspend(struct platform_device *pdev, pm_message_t state)
 	if (pdata->suspend)
 		return pdata->suspend(pdev, state);
 
-	return -EOPNOTSUPP;
+	return 0;
 }
 
 int kim_resume(struct platform_device *pdev)
@@ -802,7 +802,7 @@ int kim_resume(struct platform_device *pdev)
 	if (pdata->resume)
 		return pdata->resume(pdev);
 
-	return -EOPNOTSUPP;
+	return 0;
 }
 
 /**********************************************************************/
