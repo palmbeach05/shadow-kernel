@@ -635,7 +635,7 @@ static ssize_t show_baud_rate(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct kim_data_s *kim_data = dev_get_drvdata(dev);
-	return sprintf(buf, "%ld\n", kim_data->baud_rate);
+	return sprintf(buf, "%d\n", kim_data->baud_rate);
 }
 
 static ssize_t show_flow_cntrl(struct device *dev,
@@ -769,14 +769,14 @@ static int kim_probe(struct platform_device *pdev)
 	kim_gdata->nshutdown = pdata->nshutdown_gpio;
 	err = gpio_request(kim_gdata->nshutdown, "kim");
 	if (unlikely(err)) {
-		pr_err(" gpio %ld request failed ", kim_gdata->nshutdown);
+		pr_err(" gpio %d request failed ", kim_gdata->nshutdown);
 		return err;
 	}
 
 	/* Configure nShutdown GPIO as output=0 */
 	err = gpio_direction_output(kim_gdata->nshutdown, 0);
 	if (unlikely(err)) {
-		pr_err(" unable to configure gpio %ld", kim_gdata->nshutdown);
+		pr_err(" unable to configure gpio %d", kim_gdata->nshutdown);
 		return err;
 	}
 	/* get reference of pdev for request_firmware
