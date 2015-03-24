@@ -51,7 +51,8 @@ struct cpufreq_interactive_cpuinfo {
 	unsigned int target_freq;
 	unsigned int floor_freq;
 	unsigned int max_freq;
-	u64 floor_validate_time;
+	u64 pol_floor_val_time; /* policy floor_validate_time */
+	u64 loc_floor_val_time; /* per-cpu floor_validate_time */
 	u64 pol_hispeed_val_time; /* policy hispeed_validate_time */
 	u64 loc_hispeed_val_time; /* per-cpu hispeed_validate_time */
 	struct rw_semaphore enable_sem;
@@ -330,6 +331,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	unsigned int index;
 	unsigned long flags;
 	bool boosted;
+	u64 max_fvtime;
 
 	if (!down_read_trylock(&pcpu->enable_sem))
 		return;
@@ -393,8 +395,10 @@ static void cpufreq_interactive_timer(unsigned long data)
 	 * Do not scale below floor_freq unless we have been at or above the
 	 * floor frequency for the minimum sample time since last validated.
 	 */
-	if (new_freq < pcpu->floor_freq) {
-		if (now - pcpu->floor_validate_time < min_sample_time) {
+	max_fvtime = max(pcpu->pol_floor_val_time, pcpu->loc_floor_val_time);
+	if (new_freq < pcpu->floor_freq &&
+	    pcpu->target_freq >= pcpu->policy->cur) {
+		if (now - max_fvtime < min_sample_time) {
 			trace_cpufreq_interactive_notyet(
 				data, cpu_load, pcpu->target_freq,
 				pcpu->policy->cur, new_freq);
@@ -413,7 +417,9 @@ static void cpufreq_interactive_timer(unsigned long data)
 
 	if (!boosted || new_freq > hispeed_freq) {
 		pcpu->floor_freq = new_freq;
-		pcpu->floor_validate_time = now;
+		if (pcpu->target_freq >= pcpu->policy->cur ||
+		    new_freq >= pcpu->policy->cur)
+			pcpu->loc_floor_val_time = now;
 	}
 
 	if (pcpu->target_freq == new_freq &&
@@ -538,7 +544,7 @@ static int cpufreq_interactive_speedchange_task(void *data)
 			unsigned int j;
 			unsigned int max_freq = 0;
 			struct cpufreq_interactive_cpuinfo *pjcpu;
-			u64 hvt = ~0ULL;
+			u64 hvt = ~0ULL, fvt = 0;
 
 			pcpu = &per_cpu(cpuinfo, cpu);
 			if (!down_read_trylock(&pcpu->enable_sem))
@@ -551,12 +557,17 @@ static int cpufreq_interactive_speedchange_task(void *data)
 			for_each_cpu(j, pcpu->policy->cpus) {
 				pjcpu = &per_cpu(cpuinfo, j);
 
+				fvt = max(fvt, pjcpu->loc_floor_val_time);
 				if (pjcpu->target_freq > max_freq) {
 					max_freq = pjcpu->target_freq;
 					hvt = pjcpu->loc_hispeed_val_time;
 				} else if (pjcpu->target_freq == max_freq) {
 					hvt = min(hvt, pjcpu->loc_hispeed_val_time);
 				}
+			}
+			for_each_cpu(j, pcpu->policy->cpus) {
+				pjcpu = &per_cpu(cpuinfo, j);
+				pjcpu->pol_floor_val_time = fvt;
 			}
 
 			if (max_freq != pcpu->policy->cur) {
@@ -870,7 +881,7 @@ static ssize_t store_timer_rate(struct kobject *kobj,
 
 	val_round = jiffies_to_usecs(usecs_to_jiffies(val));
 	if (val != val_round)
-		pr_warn("timer_rate not aligned to jiffy. Rounded up to %lu\n",
+		printk("timer_rate not aligned to jiffy. Rounded up to %lu\n",
 			val_round);
 
 	timer_rate = val;
@@ -1062,11 +1073,11 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 			pcpu->target_freq = policy->cur;
 			pcpu->freq_table = freq_table;
 			pcpu->floor_freq = pcpu->target_freq;
-			pcpu->floor_validate_time =
+			pcpu->pol_floor_val_time =
 				ktime_to_us(ktime_get());
-			pcpu->pol_hispeed_val_time =
-				pcpu->floor_validate_time;
-			pcpu->loc_hispeed_val_time = pcpu->floor_validate_time;
+			pcpu->loc_floor_val_time = pcpu->pol_floor_val_time;
+			pcpu->pol_hispeed_val_time = pcpu->pol_floor_val_time;
+			pcpu->loc_hispeed_val_time = pcpu->pol_floor_val_time;
 			pcpu->max_freq = policy->max;
 			down_write(&pcpu->enable_sem);
 			del_timer_sync(&pcpu->cpu_timer);
