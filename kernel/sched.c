@@ -4686,7 +4686,6 @@ recheck:
 	    (p->mm && param->sched_priority > MAX_USER_RT_PRIO-1) ||
 	    (!p->mm && param->sched_priority > MAX_RT_PRIO-1))
 		return -EINVAL;
-
 	if (rt_policy(policy) != (param->sched_priority != 0))
 		return -EINVAL;
 
