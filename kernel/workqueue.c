@@ -68,21 +68,6 @@ struct workqueue_struct {
 #endif
 };
 
-#ifdef CONFIG_LOCKDEP
-/**
- * in_workqueue_context() - in context of specified workqueue?
- * @wq: the workqueue of interest
- *
- * Checks lockdep state to see if the current task is executing from
- * within a workqueue item.  This function exists only if lockdep is
- * enabled.
- */
-int in_workqueue_context(struct workqueue_struct *wq)
-{
-	return lock_is_held(&wq->lockdep_map);
-}
-#endif
-
 /* Serializes the accesses to the list of workqueues. */
 static DEFINE_SPINLOCK(workqueue_lock);
 static LIST_HEAD(workqueues);
@@ -976,7 +961,7 @@ static int __devinit workqueue_cpu_callback(struct notifier_block *nfb,
 	unsigned int cpu = (unsigned long)hcpu;
 	struct cpu_workqueue_struct *cwq;
 	struct workqueue_struct *wq;
-	int err = 0;
+	int ret = NOTIFY_OK;
 
 	action &= ~CPU_TASKS_FROZEN;
 
@@ -990,13 +975,12 @@ undo:
 
 		switch (action) {
 		case CPU_UP_PREPARE:
-			err = create_workqueue_thread(cwq, cpu);
-			if (!err)
+			if (!create_workqueue_thread(cwq, cpu))
 				break;
 			printk(KERN_ERR "workqueue [%s] for %i failed\n",
 				wq->name, cpu);
 			action = CPU_UP_CANCELED;
-			err = -ENOMEM;
+			ret = NOTIFY_BAD;
 			goto undo;
 
 		case CPU_ONLINE:
@@ -1017,7 +1001,7 @@ undo:
 		cpumask_clear_cpu(cpu, cpu_populated_map);
 	}
 
-	return notifier_from_errno(err);
+	return ret;
 }
 
 #ifdef CONFIG_SMP
