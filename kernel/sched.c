@@ -4704,7 +4704,7 @@ recheck:
 
 			/* can't set/change the rt policy */
 			if (policy != p->policy && !rlim_rtprio)
-				return -EPERM
+				return -EPERM;
 
 			/* can't increase priority */
 			if (param->sched_priority > p->rt_priority &&
