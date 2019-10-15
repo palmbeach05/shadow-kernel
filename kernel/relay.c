@@ -1358,3 +1358,4 @@ static __init int relay_init(void)
 }
 
 early_initcall(relay_init);
+

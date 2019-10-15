@@ -85,6 +85,7 @@ parameter is applicable:
 	PPT	Parallel port support is enabled.
 	PS2	Appropriate PS/2 support is enabled.
 	RAM	RAM disk support is enabled.
+	ROOTPLUG The example Root Plug LSM is enabled.
 	S390	S390 architecture is enabled.
 	SCSI	Appropriate SCSI support is enabled.
 			A lot of drivers has their options described inside of
@@ -778,6 +779,10 @@ and is between 256 and 4096 characters. It is defined in the file
 			by the set_ftrace_notrace file in the debugfs
 			tracing directory.
 
+	force_tsc_sync=1
+			Force TSC resynchronization when SMP CPUs go online.
+			See also idle=poll and disable frequency scaling.
+
 	ftrace_graph_filter=[function-list]
 			[FTRACE] Limit the top level callers functions traced
 			by the function graph tracer at boot up.
@@ -1208,7 +1213,7 @@ and is between 256 and 4096 characters. It is defined in the file
 			If there are multiple matching configurations changing
 			the same attribute, the last one is used.
 
-	lmb=debug	[KNL] Enable lmb debug messages.
+	memblock=debug	[KNL] Enable memblock debug messages.
 
 	load_ramdisk=	[RAM] List of ramdisks to load from floppy
 			See Documentation/blockdev/ramdisk.txt.
@@ -1778,6 +1783,8 @@ and is between 256 and 4096 characters. It is defined in the file
 			waiting for the ACK, so if this is set too high
 			interrupts *may* be lost!
 
+	omap3_die_id	[OMAP] Append DIE ID info under /proc/socinfo
+
 	opl3=		[HW,OSS]
 			Format: <io>
 
@@ -2038,15 +2045,8 @@ and is between 256 and 4096 characters. It is defined in the file
 
 	print-fatal-signals=
 			[KNL] debug: print fatal signals
-
-			If enabled, warn about various signal handling
-			related application anomalies: too many signals,
-			too many POSIX.1 timers, fatal signals causing a
-			coredump - etc.
-
-			If you hit the warning due to signal overflow,
-			you might want to try "ulimit -i unlimited".
-
+			print-fatal-signals=1: print segfault info to
+			the kernel console.
 			default: off.
 
 	printk.time=	Show timing data prefixed to each printk message line
@@ -2177,6 +2177,15 @@ and is between 256 and 4096 characters. It is defined in the file
 			Useful for devices that are detected asynchronously
 			(e.g. USB and MMC devices).
 
+	root_plug.vendor_id=
+			[ROOTPLUG] Override the default vendor ID
+
+	root_plug.product_id=
+			[ROOTPLUG] Override the default product ID
+
+	root_plug.debug=
+			[ROOTPLUG] Enable debugging output
+
 	rw		[KNL] Mount root device read-write on boot
 
 	S		[KNL] Run init in single mode
@@ -2185,6 +2194,8 @@ and is between 256 and 4096 characters. It is defined in the file
 			See drivers/net/irda/sa1100_ir.c.
 
 	sbni=		[NET] Granch SBNI12 leased line adapter
+
+	sched_debug	[KNL] Enables verbose scheduler debug messages.
 
 	sc1200wdt=	[HW,WDT] SC1200 WDT (watchdog) driver
 			Format: <io>[,<timeout>[,<isapnp>]]
@@ -2649,6 +2660,8 @@ and is between 256 and 4096 characters. It is defined in the file
 			to a common usb-storage quirk flag as follows:
 				a = SANE_SENSE (collect more than 18 bytes
 					of sense data);
+				b = BAD_SENSE (don't collect more than 18
+					bytes of sense data);
 				c = FIX_CAPACITY (decrease the reported
 					device capacity by one sector);
 				h = CAPACITY_HEURISTICS (decrease the

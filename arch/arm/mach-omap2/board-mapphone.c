@@ -1692,7 +1692,7 @@ static struct platform_device mapphone_bpwake_device = {
 #define WARMRESET 1
 #define COLDRESET 0
 
-static unsigned long reset_status = COLDRESET ;
+static unsigned long reset_status = COLDRESET;
 static struct notifier_block mapphone_pm_reboot_notifier;
 
 /* Choose cold or warm reset
@@ -2080,3 +2080,4 @@ MACHINE_START(MAPPHONE, "mapphone_")
 	.init_machine	= mapphone_init,
 	.timer		= &omap_timer,
 MACHINE_END
+
