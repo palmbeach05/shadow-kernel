@@ -160,6 +160,17 @@ static inline void set_freezable_with_signal(void)
 	} while (try_to_freeze());					\
 	__retval;							\
 })
+
+#define wait_event_freezable_exclusive(wq, condition)			\
+({									\
+	int __retval;							\
+	do {								\
+		__retval = wait_event_interruptible_exclusive(wq, 	\
+				(condition) || freezing(current));	\
+	} while (try_to_freeze());					\
+	__retval;							\
+})
+
 #else /* !CONFIG_FREEZER */
 static inline int frozen(struct task_struct *p) { return 0; }
 static inline int freezing(struct task_struct *p) { return 0; }
