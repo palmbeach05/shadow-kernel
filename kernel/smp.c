@@ -478,4 +478,3 @@ void ipi_call_unlock_irq(void)
 {
 	spin_unlock_irq(&call_function.lock);
 }
-

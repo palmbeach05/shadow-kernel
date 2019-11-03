@@ -193,15 +193,12 @@ struct e1000_buffer {
 			unsigned long time_stamp;
 			u16 length;
 			u16 next_to_watch;
-			u16 mapped_as_page;
 		};
 		/* Rx */
-		struct {
-			/* arrays of page information for packet split */
-			struct e1000_ps_page *ps_pages;
-			struct page *page;
-		};
+		/* arrays of page information for packet split */
+		struct e1000_ps_page *ps_pages;
 	};
+	struct page *page;
 };
 
 struct e1000_ring {

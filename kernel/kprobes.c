@@ -1014,9 +1014,9 @@ int __kprobes register_kretprobe(struct kretprobe *rp)
 	/* Pre-allocate memory for max kretprobe instances */
 	if (rp->maxactive <= 0) {
 #ifdef CONFIG_PREEMPT
-		rp->maxactive = max(10, 2 * num_possible_cpus());
+		rp->maxactive = max(10, 2 * NR_CPUS);
 #else
-		rp->maxactive = num_possible_cpus();
+		rp->maxactive = NR_CPUS;
 #endif
 	}
 	spin_lock_init(&rp->lock);

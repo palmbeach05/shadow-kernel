@@ -483,6 +483,10 @@ static inline int ftrace_graph_addr(unsigned long addr)
 	return 0;
 }
 #else
+static inline int ftrace_trace_addr(unsigned long addr)
+{
+	return 1;
+}
 static inline int ftrace_graph_addr(unsigned long addr)
 {
 	return 1;
@@ -496,12 +500,12 @@ print_graph_function(struct trace_iterator *iter)
 }
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */
 
-extern struct list_head ftrace_pids;
+extern struct pid *ftrace_pid_trace;
 
 #ifdef CONFIG_FUNCTION_TRACER
 static inline int ftrace_trace_task(struct task_struct *task)
 {
-	if (list_empty(&ftrace_pids))
+	if (!ftrace_pid_trace)
 		return 1;
 
 	return test_tsk_trace_trace(task);
@@ -695,40 +699,22 @@ struct event_subsystem {
 };
 
 struct filter_pred;
-struct regex;
 
 typedef int (*filter_pred_fn_t) (struct filter_pred *pred, void *event,
 				 int val1, int val2);
 
-typedef int (*regex_match_func)(char *str, struct regex *r, int len);
-
-enum regex_type {
-	MATCH_FULL,
-	MATCH_FRONT_ONLY,
-	MATCH_MIDDLE_ONLY,
-	MATCH_END_ONLY,
-};
-
-struct regex {
-	char			pattern[MAX_FILTER_STR_VAL];
-	int			len;
-	int			field_len;
-	regex_match_func	match;
-};
-
 struct filter_pred {
-	filter_pred_fn_t 	fn;
-	u64 			val;
-	struct regex		regex;
-	char 			*field_name;
-	int 			offset;
-	int 			not;
-	int 			op;
-	int 			pop_n;
+	filter_pred_fn_t fn;
+	u64 val;
+	char str_val[MAX_FILTER_STR_VAL];
+	int str_len;
+	char *field_name;
+	int offset;
+	int not;
+	int op;
+	int pop_n;
 };
 
-extern enum regex_type
-filter_parse_regex(char *buff, int len, char **search, int *not);
 extern void print_event_filter(struct ftrace_event_call *call,
 			       struct trace_seq *s);
 extern int apply_event_filter(struct ftrace_event_call *call,

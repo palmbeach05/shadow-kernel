@@ -878,9 +878,9 @@ event_subsystem_dir(const char *name, struct dentry *d_events)
 			   "'%s/filter' entry\n", name);
 	}
 
-	trace_create_file("enable", 0644, system->entry,
-			  (void *)system->name,
-			  &ftrace_system_enable_fops);
+	entry = trace_create_file("enable", 0644, system->entry,
+				  (void *)system->name,
+				  &ftrace_system_enable_fops);
 
 	return system->entry;
 }
@@ -892,6 +892,7 @@ event_create_dir(struct ftrace_event_call *call, struct dentry *d_events,
 		 const struct file_operations *filter,
 		 const struct file_operations *format)
 {
+	struct dentry *entry;
 	int ret;
 
 	/*
@@ -909,12 +910,12 @@ event_create_dir(struct ftrace_event_call *call, struct dentry *d_events,
 	}
 
 	if (call->regfunc)
-		trace_create_file("enable", 0644, call->dir, call,
-				  enable);
+		entry = trace_create_file("enable", 0644, call->dir, call,
+					  enable);
 
 	if (call->id && call->profile_enable)
-		trace_create_file("id", 0444, call->dir, call,
-				  id);
+		entry = trace_create_file("id", 0444, call->dir, call,
+					  id);
 
 	if (call->define_fields) {
 		ret = call->define_fields(call);
@@ -923,16 +924,16 @@ event_create_dir(struct ftrace_event_call *call, struct dentry *d_events,
 				   " events/%s\n", call->name);
 			return ret;
 		}
-		trace_create_file("filter", 0644, call->dir, call,
-				  filter);
+		entry = trace_create_file("filter", 0644, call->dir, call,
+					  filter);
 	}
 
 	/* A trace may not want to export its format */
 	if (!call->show_format)
 		return 0;
 
-	trace_create_file("format", 0444, call->dir, call,
-			  format);
+	entry = trace_create_file("format", 0444, call->dir, call,
+				  format);
 
 	return 0;
 }

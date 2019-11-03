@@ -935,4 +935,3 @@ int __weak arch_init_chip_data(struct irq_desc *desc, int node)
 {
 	return 0;
 }
-

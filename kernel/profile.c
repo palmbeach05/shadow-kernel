@@ -626,4 +626,3 @@ int __ref create_proc_profile(void) /* false positive from hotcpu_notifier */
 }
 module_init(create_proc_profile);
 #endif /* CONFIG_PROC_FS */
-
