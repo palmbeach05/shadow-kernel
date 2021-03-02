@@ -185,7 +185,6 @@ static void ts27010_ldisc_wakeup(struct tty_struct *tty)
 
 static struct tty_ldisc_ops ts27010_ldisc = {
 	.owner  = THIS_MODULE,
-	.magic	= TTY_LDISC_MAGIC,
 	.name	= "n_ts27010",
 	.open	= ts27010_ldisc_open,
 	.close	= ts27010_ldisc_close,
