@@ -1505,7 +1505,7 @@ n_tty_receive_char_lnext(struct tty_struct *tty, unsigned char c, char flag)
 
 static void
 n_tty_receive_buf_real_raw(struct tty_struct *tty, const unsigned char *cp,
-			   char *fp, int count)
+			   const char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	size_t n, head;
@@ -1525,7 +1525,7 @@ n_tty_receive_buf_real_raw(struct tty_struct *tty, const unsigned char *cp,
 
 static void
 n_tty_receive_buf_raw(struct tty_struct *tty, const unsigned char *cp,
-		      char *fp, int count)
+		      const char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	char flag = TTY_NORMAL;
@@ -1542,7 +1542,7 @@ n_tty_receive_buf_raw(struct tty_struct *tty, const unsigned char *cp,
 
 static void
 n_tty_receive_buf_closing(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, int count)
+			  const char *fp, int count)
 {
 	char flag = TTY_NORMAL;
 
@@ -1554,9 +1554,8 @@ n_tty_receive_buf_closing(struct tty_struct *tty, const unsigned char *cp,
 	}
 }
 
-static void
-n_tty_receive_buf_standard(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, int count)
+static void n_tty_receive_buf_standard(struct tty_struct *tty,
+		const unsigned char *cp, const char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	char flag = TTY_NORMAL;
@@ -1615,7 +1614,7 @@ n_tty_receive_buf_fast(struct tty_struct *tty, const unsigned char *cp,
 }
 
 static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, int count)
+			  const char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	bool preops = I_ISTRIP(tty) || (I_IUCLC(tty) && L_IEXTEN(tty));
@@ -1694,7 +1693,7 @@ static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
  */
 static int
 n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
-			 char *fp, int count, int flow)
+			 const char *fp, int count, int flow)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	int room, n, rcvd = 0, overflow;
@@ -1763,13 +1762,13 @@ n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
 }
 
 static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
-			      char *fp, int count)
+			      const char *fp, int count)
 {
 	n_tty_receive_buf_common(tty, cp, fp, count, 0);
 }
 
 static int n_tty_receive_buf2(struct tty_struct *tty, const unsigned char *cp,
-			      char *fp, int count)
+			      const char *fp, int count)
 {
 	return n_tty_receive_buf_common(tty, cp, fp, count, 1);
 }

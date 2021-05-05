@@ -2413,7 +2413,7 @@ static void gsmld_detach_gsm(struct tty_struct *tty, struct gsm_mux *gsm)
 }
 
 static void gsmld_receive_buf(struct tty_struct *tty, const unsigned char *cp,
-			      char *fp, int count)
+			      const char *fp, int count)
 {
 	struct gsm_mux *gsm = tty->disc_data;
 	const unsigned char *dp;

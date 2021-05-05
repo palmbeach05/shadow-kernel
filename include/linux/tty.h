@@ -473,14 +473,15 @@ extern inline int tty_port_users(struct tty_port *port)
 
 extern int tty_register_ldisc(int disc, struct tty_ldisc_ops *new_ldisc);
 extern int tty_unregister_ldisc(int disc);
-extern int tty_set_ldisc(struct tty_struct *tty, int ldisc);
+extern int tty_set_ldisc(struct tty_struct *tty, int disc);
 extern int tty_ldisc_setup(struct tty_struct *tty, struct tty_struct *o_tty);
 extern void tty_ldisc_release(struct tty_struct *tty, struct tty_struct *o_tty);
 extern void tty_ldisc_init(struct tty_struct *tty);
 extern void tty_ldisc_begin(void);
+extern int tty_ldisc_receive_buf(struct tty_ldisc *ld, const unsigned char *p,
+				 const char *f, int count);
 /* This last one is just for the tty layer internals and shouldn't be used elsewhere */
 extern void tty_ldisc_enable(struct tty_struct *tty);
-
 
 /* n_tty.c */
 extern struct tty_ldisc_ops tty_ldisc_N_TTY;
