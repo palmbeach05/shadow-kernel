@@ -626,9 +626,7 @@ static void __exit ams_delta_module_exit(void)
 		}
 	}
 
-	if (tty_unregister_ldisc(&cx81801_ops) != 0)
-		dev_warn(&ams_delta_audio_platform_device->dev,
-			"failed to unregister V253 line discipline\n");
+	tty_unregister_ldisc(&cx81801_ops);
 
 	snd_soc_jack_free_gpios(&ams_delta_hook_switch,
 			ARRAY_SIZE(ams_delta_hook_switch_gpios),
