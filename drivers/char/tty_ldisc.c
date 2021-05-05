@@ -126,19 +126,16 @@ EXPORT_SYMBOL(tty_register_ldisc);
  *		takes tty_ldisc_lock to guard against ldisc races
  */
 
-int tty_unregister_ldisc(int disc)
+int tty_unregister_ldisc(struct tty_ldisc_ops *ldisc)
 {
 	unsigned long flags;
 	int ret = 0;
 
-	if (disc < N_TTY || disc >= NR_LDISCS)
-		return -EINVAL;
-
 	spin_lock_irqsave(&tty_ldisc_lock, flags);
-	if (tty_ldiscs[disc]->refcount)
+	if (tty_ldiscs[ldisc->num]->refcount)
 		ret = -EBUSY;
 	else
-		tty_ldiscs[disc] = NULL;
+		tty_ldiscs[ldisc->num] = NULL;
 	spin_unlock_irqrestore(&tty_ldisc_lock, flags);
 
 	return ret;
