@@ -96,17 +96,17 @@ static void put_ldisc(struct tty_ldisc *ld)
  *		takes tty_ldisc_lock to guard against ldisc races
  */
 
-int tty_register_ldisc(int disc, struct tty_ldisc_ops *new_ldisc)
+int tty_register_ldisc(struct tty_ldisc_ops *new_ldisc)
 {
 	unsigned long flags;
 	int ret = 0;
+	int disc = new_ldisc->num;
 
 	if (disc < N_TTY || disc >= NR_LDISCS)
 		return -EINVAL;
 
 	spin_lock_irqsave(&tty_ldisc_lock, flags);
 	tty_ldiscs[disc] = new_ldisc;
-	new_ldisc->num = disc;
 	new_ldisc->refcount = 0;
 	spin_unlock_irqrestore(&tty_ldisc_lock, flags);
 
@@ -864,6 +864,6 @@ void tty_ldisc_init(struct tty_struct *tty)
 
 void tty_ldisc_begin(void)
 {
-	/* Setup the default TTY line discipline. */
-	(void) tty_register_ldisc(N_TTY, &tty_ldisc_N_TTY);
+	tty_ldisc_N_TTY.num = N_TTY;
+	(void) tty_register_ldisc(&tty_ldisc_N_TTY);
 }

@@ -359,13 +359,14 @@ static void cx81801_wakeup(struct tty_struct *tty)
 }
 
 static struct tty_ldisc_ops cx81801_ops = {
-	.name = "cx81801",
-	.owner = THIS_MODULE,
-	.open = cx81801_open,
-	.close = cx81801_close,
-	.hangup = cx81801_hangup,
-	.receive_buf = cx81801_receive,
-	.write_wakeup = cx81801_wakeup,
+	.name 		= "cx81801",
+	.num 		= N_V253,
+	.owner 		= THIS_MODULE,
+	.open 		= cx81801_open,
+	.close 		= cx81801_close,
+	.hangup 	= cx81801_hangup,
+	.receive_buf 	= cx81801_receive,
+	.write_wakeup 	= cx81801_wakeup,
 };
 
 
@@ -463,6 +464,7 @@ static void ams_delta_shutdown(struct snd_pcm_substream *substream)
 static int ams_delta_cx20442_init(struct snd_soc_codec *codec)
 {
 	struct snd_soc_dai *codec_dai = codec->dai;
+	printk(KERN_ERR "DEBUG: ams_delta_cx20442_init REACHED\n");
 	struct snd_soc_card *card = codec->socdev->card;
 	int ret;
 	/* Codec is ready, now add/activate board specific controls */

@@ -158,7 +158,7 @@ static unsigned int ts27010_ldisc_poll(struct tty_struct *tty,
  */
 static void ts27010_ldisc_receive(struct tty_struct *tty,
 				  const unsigned char *data,
-				  char *cflags, int count)
+				  const char *cflags, int count)
 {
 	struct ts27010_ldisc_data *ts = tty->disc_data;
 	int n;
@@ -186,6 +186,7 @@ static void ts27010_ldisc_wakeup(struct tty_struct *tty)
 static struct tty_ldisc_ops ts27010_ldisc = {
 	.owner  = THIS_MODULE,
 	.name	= "n_ts27010",
+	.num    = N_TS2710,
 	.open	= ts27010_ldisc_open,
 	.close	= ts27010_ldisc_close,
 	.hangup	= ts27010_ldisc_hangup,
@@ -201,7 +202,7 @@ int ts27010_ldisc_init(void)
 {
 	int err;
 
-	err = tty_register_ldisc(N_TS2710, &ts27010_ldisc);
+	err = tty_register_ldisc(&ts27010_ldisc);
 	if (err < 0)
 		pr_err("ts27010: unable to register line discipline\n");
 

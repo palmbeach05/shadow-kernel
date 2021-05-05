@@ -81,13 +81,11 @@ static inline void ti_st_tx_complete(struct ti_st *hst, int pkt_type)
  * status.ti_st_open() function will wait for signal from this
  * API when st_register() function returns ST_PENDING.
  */
-static void st_reg_completion_cb(void *priv_data, int data)
+static void st_reg_completion_cb(void *priv_data, int status)
 {
-	struct ti_st *lhst = priv_data;
+	struct ti_st *lhst = (struct ti_st *)priv_data;
 
-	/* Save registration status for use in ti_st_open() */
-	lhst->reg_status = data;
-	/* complete the wait in ti_st_open() */
+	lhst->reg_status = status;
 	complete(&lhst->wait_reg_completion);
 }
 

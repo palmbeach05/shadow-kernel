@@ -162,7 +162,7 @@ static inline int kim_check_data_len(struct kim_data_s *kim_gdata, int len)
  *	tty_receive and hence the logic
  */
 static void kim_int_recv(struct kim_data_s *kim_gdata,
-	const unsigned char *data, long count)
+	const unsigned char *data, const char *fp, long count)
 {
 	const unsigned char *ptr;
 	int len = 0;
@@ -467,7 +467,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
  * 1. response to read local version
  * 2. during send/recv's of firmware download
  */
-void st_kim_recv(void *disc_data, const unsigned char *data, long count)
+void st_kim_recv(void *disc_data, const unsigned char *data, const char *fp, long count)
 {
 	struct st_data_s	*st_gdata = (struct st_data_s *)disc_data;
 	struct kim_data_s	*kim_gdata = st_gdata->kim_data;
@@ -476,7 +476,7 @@ void st_kim_recv(void *disc_data, const unsigned char *data, long count)
 	 * proceed to gather all data and distinguish read fw version response
 	 * from other fw responses when data gathering is complete
 	 */
-	kim_int_recv(kim_gdata, data, count);
+	kim_int_recv(kim_gdata, data, fp, count);
 	return;
 }
 

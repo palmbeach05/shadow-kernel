@@ -29,14 +29,14 @@
 
 #include <linux/ti_wilink_st.h>
 
-extern void st_kim_recv(void *, const unsigned char *, long);
-void st_int_recv(void *, const unsigned char *, long);
+extern void st_kim_recv(void *, const unsigned char *, const char *, long);
+void st_int_recv(void *, const unsigned char *, const char *, long);
 /*
  * function pointer pointing to either,
  * st_kim_recv during registration to receive fw download responses
  * st_int_recv after registration to receive proto stack responses
  */
-static void (*st_recv) (void *, const unsigned char *, long);
+static void (*st_recv) (void *, const unsigned char *, const char *, long);
 
 /********************************************************************/
 static void add_channel_to_table(struct st_data_s *st_gdata,
@@ -240,7 +240,7 @@ static inline void st_wakeup_ack(struct st_data_s *st_gdata,
  *	CH-8 packets from FM, CH-9 packets from GPS cores.
  */
 void st_int_recv(void *disc_data,
-	const unsigned char *data, long count)
+	const unsigned char *data, const char *fp, long count)
 {
 	char *ptr;
 	struct st_proto_s *proto;
@@ -811,7 +811,7 @@ static void st_tty_close(struct tty_struct *tty)
 }
 
 static void st_tty_receive(struct tty_struct *tty, const unsigned char *data,
-			   const char *tty_flags, int count)
+			   const char *fp, int count)
 {
 #ifdef VERBOSE
 	print_hex_dump(KERN_DEBUG, ">in>", DUMP_PREFIX_NONE,
@@ -822,7 +822,7 @@ static void st_tty_receive(struct tty_struct *tty, const unsigned char *data,
 	 * if fw download is in progress then route incoming data
 	 * to KIM for validation
 	 */
-	st_recv(tty->disc_data, data, count);
+	st_recv(tty->disc_data, data, fp, (long)count);
 	pr_debug("done %s", __func__);
 }
 
@@ -858,6 +858,7 @@ static void st_tty_flush_buffer(struct tty_struct *tty)
 }
 
 static struct tty_ldisc_ops st_ldisc_ops = {
+	.num = N_TI_WL,
 	.name = "n_st",
 	.open = st_tty_open,
 	.close = st_tty_close,
@@ -873,7 +874,7 @@ int st_core_init(struct st_data_s **core_data)
 	struct st_data_s *st_gdata;
 	long err;
 
-	err = tty_register_ldisc(N_TI_WL, &st_ldisc_ops);
+	err = tty_register_ldisc(&st_ldisc_ops);
 	if (err) {
 		pr_err("error registering %d line discipline %ld",
 			   N_TI_WL, err);

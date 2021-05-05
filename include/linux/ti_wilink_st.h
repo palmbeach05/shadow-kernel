@@ -71,7 +71,7 @@ struct st_proto_s {
 	enum proto_type type;
 	long (*recv) (void *, struct sk_buff *);
 	unsigned char (*match_packet) (const unsigned char *data);
-	void (*reg_complete_cb) (void *, int data);
+	void (*reg_complete_cb) (void *, int status); 
 	long (*write) (struct sk_buff *skb);
 	void *priv_data;
 
@@ -284,7 +284,8 @@ long st_kim_stop(void *);
 
 void st_kim_complete(void *);
 void kim_st_list_protocols(struct st_data_s *, void *);
-void st_kim_recv(void *, const unsigned char *, long);
+void st_kim_recv(void *, const unsigned char *, const char *, long);
+void st_int_recv(void *, const unsigned char *, const char *, long);
 
 
 /*
