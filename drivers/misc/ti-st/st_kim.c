@@ -161,8 +161,8 @@ static inline int kim_check_data_len(struct kim_data_s *kim_gdata, int len)
  *	have been observed to come in bursts of different
  *	tty_receive and hence the logic
  */
-static void kim_int_recv(struct kim_data_s *kim_gdata,
-	const unsigned char *ptr, const char *fp, long count)
+static void kim_int_recv(struct kim_data_s *kim_gdata, const u8 *ptr,
+			 const u8 *fp, size_t count)
 {
 	int len = 0;
 	unsigned char *plen;
@@ -488,7 +488,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
  * 1. response to read local version
  * 2. during send/recv's of firmware download
  */
-void st_kim_recv(void *disc_data, const unsigned char *data, const char *fp, long count)
+void st_kim_recv(void *disc_data, const u8 *data, const u8 *fp, size_t count)
 {
 	struct st_data_s	*st_gdata = (struct st_data_s *)disc_data;
 	struct kim_data_s	*kim_gdata = st_gdata->kim_data;
