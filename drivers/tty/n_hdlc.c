@@ -357,12 +357,12 @@ static void n_hdlc_tty_wakeup(struct tty_struct *tty)
  * interpreted as one HDLC frame.
  */
 static void n_hdlc_tty_receive(struct tty_struct *tty, const __u8 *data,
-			       const char *flags, int count)
+			       const char *flags, size_t count)
 {
 	register struct n_hdlc *n_hdlc = tty->disc_data;
 	register struct n_hdlc_buf *buf;
 
-	pr_debug("%s() called count=%d\n", __func__, count);
+	pr_debug("%s() called count=%zu\n", __func__, count);
 
 	/* verify line is using HDLC discipline */
 	if (n_hdlc->magic != HDLC_MAGIC) {

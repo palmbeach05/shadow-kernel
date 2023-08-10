@@ -455,7 +455,7 @@ out:
  * and sent on to some IP layer for further processing.
  */
 static void sixpack_receive_buf(struct tty_struct *tty,
-	const unsigned char *cp, const char *fp, int count)
+	const unsigned char *cp, const char *fp, size_t count)
 {
 	struct sixpack *sp;
 	unsigned char buf[512];

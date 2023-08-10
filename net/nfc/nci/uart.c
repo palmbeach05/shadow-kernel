@@ -387,8 +387,20 @@ static int nci_uart_default_recv_buf(struct nci_uart *nu, const u8 *data,
 	return 0;
 }
 
-/* -- Default recv handler -- */
-static int nci_uart_default_recv(struct nci_uart *nu, struct sk_buff *skb)
+/* nci_uart_tty_receive()
+ *
+ *     Called by tty low level driver when receive data is
+ *     available.
+ *
+ * Arguments:  tty          pointer to tty instance data
+ *             data         pointer to received data
+ *             flags        pointer to flags for data
+ *             count        count of received data in bytes
+ *
+ * Return Value:    None
+ */
+static void nci_uart_tty_receive(struct tty_struct *tty, const u8 *data,
+				 const char *flags, size_t count)
 {
 	return nci_recv_frame(nu->ndev, skb);
 }

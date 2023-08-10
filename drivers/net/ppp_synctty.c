@@ -383,7 +383,7 @@ ppp_sync_poll(struct tty_struct *tty, struct file *file, poll_table *wait)
 /* May sleep, don't call from interrupt level or with interrupts disabled */
 static void
 ppp_sync_receive(struct tty_struct *tty, const unsigned char *buf,
-		  const char *cflags, int count)
+		 const char *cflags, size_t count)
 {
 	struct syncppp *ap = sp_get(tty);
 	unsigned long flags;
