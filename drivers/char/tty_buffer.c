@@ -279,7 +279,7 @@ EXPORT_SYMBOL(tty_insert_flip_string);
  */
 
 int tty_insert_flip_string_flags(struct tty_struct *tty,
-		const u8 *chars, const char *flags, size_t size)
+		const u8 *chars, const u8 *flags, size_t size)
 {
 	int copied = 0;
 	do {
@@ -369,7 +369,7 @@ EXPORT_SYMBOL_GPL(tty_prepare_flip_string);
  */
 
 int tty_prepare_flip_string_flags(struct tty_struct *tty,
-			u8 **chars, char **flags, size_t size)
+			u8 **chars, u8 **flags, size_t size)
 {
 	int space = tty_buffer_request_room(tty, size);
 	if (likely(space)) {

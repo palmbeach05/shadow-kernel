@@ -157,8 +157,8 @@ static unsigned int ts27010_ldisc_poll(struct tty_struct *tty,
  * the mux receive code is called in processes context.
  */
 static void ts27010_ldisc_receive(struct tty_struct *tty,
-				  const unsigned char *data,
-				  const char *cflags, int count)
+				  const u8 *data,
+				  const u8 *cflags, int count)
 {
 	struct ts27010_ldisc_data *ts = tty->disc_data;
 	int n;
@@ -167,7 +167,7 @@ static void ts27010_ldisc_receive(struct tty_struct *tty,
 	WARN_ON(count == 0);
 
 	spin_lock_irqsave(&ts->recv_lock, flags);
-	n = ts27010_ringbuf_write(ts->rbuf, (const unsigned char *)data, count);
+	n = ts27010_ringbuf_write(ts->rbuf, (const u8 *)data, count);
 	spin_unlock_irqrestore(&ts->recv_lock, flags);
 
 	if (n < count)

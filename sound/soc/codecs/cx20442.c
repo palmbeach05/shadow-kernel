@@ -273,7 +273,7 @@ static int v253_hangup(struct tty_struct *tty)
 }
 
 /* Line discipline .receive_buf() */
-static void v253_receive(struct tty_struct *tty, const u8 *cp, const char *fp,
+static void v253_receive(struct tty_struct *tty, const u8 *cp, const u8 *fp,
 			 size_t count)
 {
 	struct snd_soc_codec *codec = tty->disc_data;

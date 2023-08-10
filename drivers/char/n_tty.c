@@ -1350,7 +1350,7 @@ static void n_tty_write_wakeup(struct tty_struct *tty)
  */
 
 static void n_tty_receive_buf(struct tty_struct *tty, const u8 *cp,
-			      const char *fp, size_t count)
+			      const u8 *fp, size_t count)
 {
 	const unsigned char *p;
 	const char *f;

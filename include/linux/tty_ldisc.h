@@ -133,11 +133,11 @@ struct tty_ldisc_ops {
 	 * The following routines are called from below.
 	 */
 	void	(*receive_buf)(struct tty_struct *, const u8 *cp,
-			       const char *fp, size_t count);
+			       const u8 *fp, size_t count);
 	void	(*write_wakeup)(struct tty_struct *);
 	void	(*dcd_change)(struct tty_struct *, unsigned int);
 	size_t	(*receive_buf2)(struct tty_struct *, const u8 *cp,
-				const char *fp, size_t count);
+				const u8 *fp, size_t count);
 
 	struct  module *owner;
 	

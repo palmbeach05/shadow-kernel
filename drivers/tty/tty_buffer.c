@@ -308,7 +308,7 @@ EXPORT_SYMBOL_GPL(tty_buffer_request_room);
  *	passed are marked with the supplied flag. Returns the number added.
  */
 int tty_insert_flip_string_fixed_flag(struct tty_port *port, const u8 *chars,
-		char flag, size_t size)
+				      u8 flag, size_t size)
 {
 	int copied = 0;
 	do {
@@ -343,7 +343,7 @@ EXPORT_SYMBOL(tty_insert_flip_string_fixed_flag);
  *	number added.
  */
 int tty_insert_flip_string_flags(struct tty_port *port, const u8 *chars,
-		const char *flags, size_t size)
+				 const u8 *flags, size_t size)
 {
 	int copied = 0;
 	do {
@@ -374,7 +374,7 @@ EXPORT_SYMBOL(tty_insert_flip_string_flags);
  *	Queue a single byte to the tty buffering, with an optional flag.
  *	This is the slow path of tty_insert_flip_char.
  */
-int __tty_insert_flip_char(struct tty_port *port, u8 ch, char flag)
+int __tty_insert_flip_char(struct tty_port *port, u8 ch, u8 flag)
 {
 	struct tty_buffer *tb;
 	int flags = (flag == TTY_NORMAL) ? TTYB_NORMAL : 0;
@@ -425,7 +425,7 @@ EXPORT_SYMBOL_GPL(tty_prepare_flip_string);
  *
  *	Returns the number of bytes processed
  */
-size_t tty_ldisc_receive_buf(struct tty_ldisc *ld, const u8 *p, const char *f,
+size_t tty_ldisc_receive_buf(struct tty_ldisc *ld, const u8 *p, const u8 *f,
 			     size_t count)
 {
 	if (ld->ops->receive_buf2)

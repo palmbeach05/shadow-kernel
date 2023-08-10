@@ -3,13 +3,13 @@
 
 extern int tty_buffer_request_room(struct tty_struct *tty, size_t size);
 extern int tty_insert_flip_string(struct tty_struct *tty, const u8 *chars, size_t size);
-extern int tty_insert_flip_string_flags(struct tty_struct *tty, const u8 *chars, const char *flags, size_t size);
+extern int tty_insert_flip_string_flags(struct tty_struct *tty, const u8 *chars, const u8 *flags, size_t size);
 extern int tty_prepare_flip_string(struct tty_struct *tty, u8 **chars, size_t size);
-extern int tty_prepare_flip_string_flags(struct tty_struct *tty, u8 **chars, char **flags, size_t size);
+extern int tty_prepare_flip_string_flags(struct tty_struct *tty, u8 **chars, u8 **flags, size_t size);
 void tty_schedule_flip(struct tty_struct *tty);
 
 static inline int tty_insert_flip_char(struct tty_struct *tty,
-					u8 ch, char flag)
+					u8 ch, u8 flag)
 {
 	struct tty_buffer *tb = tty->buf.tail;
 	if (tb && tb->used < tb->size) {

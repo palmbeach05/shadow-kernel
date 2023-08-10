@@ -101,7 +101,7 @@ static int ppp_async_send(struct ppp_channel *chan, struct sk_buff *skb);
 static int ppp_async_push(struct asyncppp *ap);
 static void ppp_async_flush_output(struct asyncppp *ap);
 static void ppp_async_input(struct asyncppp *ap, const unsigned char *buf,
-			    const char *flags, int count);
+			    const u8 *flags, int count);
 static int ppp_async_ioctl(struct ppp_channel *chan, unsigned int cmd,
 			   unsigned long arg);
 static void ppp_async_process(unsigned long arg);
@@ -341,7 +341,7 @@ ppp_asynctty_poll(struct tty_struct *tty, struct file *file, poll_table *wait)
 
 /* May sleep, don't call from interrupt level or with interrupts disabled */
 static void
-ppp_asynctty_receive(struct tty_struct *tty, const u8 *buf, const char *cflags,
+ppp_asynctty_receive(struct tty_struct *tty, const u8 *buf, const u8 *cflags,
 		     size_t count)
 {
 	struct asyncppp *ap = ap_get(tty);
@@ -831,8 +831,7 @@ process_input_packet(struct asyncppp *ap)
    other ldisc functions but will not be re-entered */
 
 static void
-ppp_async_input(struct asyncppp *ap, const u8 *buf, const char *flags,
-		int count)
+ppp_async_input(struct asyncppp *ap, const u8 *buf, const u8 *flags, int count)
 {
 	struct sk_buff *skb;
 	int c, i, j, n, s, f;
