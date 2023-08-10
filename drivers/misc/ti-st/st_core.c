@@ -804,7 +804,7 @@ static void st_tty_close(struct tty_struct *tty)
 	pr_debug("%s: done ", __func__);
 }
 
-static void st_tty_receive(struct tty_struct *tty, const unsigned char *data,
+static void st_tty_receive(struct tty_struct *tty, const u8 *data,
 			   const char *fp, size_t count)
 {
 #ifdef VERBOSE

@@ -341,8 +341,8 @@ ppp_asynctty_poll(struct tty_struct *tty, struct file *file, poll_table *wait)
 
 /* May sleep, don't call from interrupt level or with interrupts disabled */
 static void
-ppp_asynctty_receive(struct tty_struct *tty, const unsigned char *buf,
-		     const char *cflags, size_t count)
+ppp_asynctty_receive(struct tty_struct *tty, const u8 *buf, const char *cflags,
+		     size_t count)
 {
 	struct asyncppp *ap = ap_get(tty);
 	unsigned long flags;
@@ -831,8 +831,8 @@ process_input_packet(struct asyncppp *ap)
    other ldisc functions but will not be re-entered */
 
 static void
-ppp_async_input(struct asyncppp *ap, const unsigned char *buf,
-		const char *flags, int count)
+ppp_async_input(struct asyncppp *ap, const u8 *buf, const char *flags,
+		int count)
 {
 	struct sk_buff *skb;
 	int c, i, j, n, s, f;

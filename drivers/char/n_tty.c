@@ -1349,7 +1349,7 @@ static void n_tty_write_wakeup(struct tty_struct *tty)
  *	calls one at a time and in order (or using flush_to_ldisc)
  */
 
-static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
+static void n_tty_receive_buf(struct tty_struct *tty, const u8 *cp,
 			      const char *fp, size_t count)
 {
 	const unsigned char *p;

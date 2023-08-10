@@ -242,7 +242,7 @@ EXPORT_SYMBOL_GPL(tty_buffer_request_room);
  *	Locking: Called functions may take tty->buf.lock
  */
 
-int tty_insert_flip_string(struct tty_struct *tty, const unsigned char *chars,
+int tty_insert_flip_string(struct tty_struct *tty, const u8 *chars,
 				size_t size)
 {
 	int copied = 0;
@@ -279,7 +279,7 @@ EXPORT_SYMBOL(tty_insert_flip_string);
  */
 
 int tty_insert_flip_string_flags(struct tty_struct *tty,
-		const unsigned char *chars, const char *flags, size_t size)
+		const u8 *chars, const char *flags, size_t size)
 {
 	int copied = 0;
 	do {
@@ -338,7 +338,7 @@ EXPORT_SYMBOL(tty_schedule_flip);
  *	Locking: May call functions taking tty->buf.lock
  */
 
-int tty_prepare_flip_string(struct tty_struct *tty, unsigned char **chars,
+int tty_prepare_flip_string(struct tty_struct *tty, u8 **chars,
 								size_t size)
 {
 	int space = tty_buffer_request_room(tty, size);
@@ -369,7 +369,7 @@ EXPORT_SYMBOL_GPL(tty_prepare_flip_string);
  */
 
 int tty_prepare_flip_string_flags(struct tty_struct *tty,
-			unsigned char **chars, char **flags, size_t size)
+			u8 **chars, char **flags, size_t size)
 {
 	int space = tty_buffer_request_room(tty, size);
 	if (likely(space)) {
@@ -381,8 +381,6 @@ int tty_prepare_flip_string_flags(struct tty_struct *tty,
 	return space;
 }
 EXPORT_SYMBOL_GPL(tty_prepare_flip_string_flags);
-
-
 
 /**
  *	flush_to_ldisc

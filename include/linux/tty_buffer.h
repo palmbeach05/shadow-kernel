@@ -10,7 +10,7 @@
 struct tty_buffer {
 	struct tty_buffer *next;
 	char *char_buf_ptr;
-	unsigned char *flag_buf_ptr;
+	u8 *flag_buf_ptr;
 	int used;
 	int size;
 	int commit;

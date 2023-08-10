@@ -307,9 +307,8 @@ EXPORT_SYMBOL_GPL(tty_buffer_request_room);
  *	Queue a series of bytes to the tty buffering. All the characters
  *	passed are marked with the supplied flag. Returns the number added.
  */
-
-int tty_insert_flip_string_fixed_flag(struct tty_port *port,
-		const unsigned char *chars, char flag, size_t size)
+int tty_insert_flip_string_fixed_flag(struct tty_port *port, const u8 *chars,
+		char flag, size_t size)
 {
 	int copied = 0;
 	do {
@@ -343,9 +342,8 @@ EXPORT_SYMBOL(tty_insert_flip_string_fixed_flag);
  *	the flags array indicates the status of the character. Returns the
  *	number added.
  */
-
-int tty_insert_flip_string_flags(struct tty_port *port,
-		const unsigned char *chars, const char *flags, size_t size)
+int tty_insert_flip_string_flags(struct tty_port *port, const u8 *chars,
+		const char *flags, size_t size)
 {
 	int copied = 0;
 	do {
@@ -376,7 +374,7 @@ EXPORT_SYMBOL(tty_insert_flip_string_flags);
  *	Queue a single byte to the tty buffering, with an optional flag.
  *	This is the slow path of tty_insert_flip_char.
  */
-int __tty_insert_flip_char(struct tty_port *port, unsigned char ch, char flag)
+int __tty_insert_flip_char(struct tty_port *port, u8 ch, char flag)
 {
 	struct tty_buffer *tb;
 	int flags = (flag == TTY_NORMAL) ? TTYB_NORMAL : 0;
@@ -401,34 +399,7 @@ EXPORT_SYMBOL(__tty_insert_flip_char);
  *	ldisc side of the queue. It then schedules those characters for
  *	processing by the line discipline.
  */
-
-void tty_schedule_flip(struct tty_port *port)
-{
-	struct tty_bufhead *buf = &port->buf;
-
-	/* paired w/ acquire in flush_to_ldisc(); ensures
-	 * flush_to_ldisc() sees buffer data.
-	 */
-	smp_store_release(&buf->tail->commit, buf->tail->used);
-	queue_work(system_unbound_wq, &buf->work);
-}
-EXPORT_SYMBOL(tty_schedule_flip);
-
-/**
- *	tty_prepare_flip_string		-	make room for characters
- *	@port: tty port
- *	@chars: return pointer for character write area
- *	@size: desired size
- *
- *	Prepare a block of space in the buffer for data. Returns the length
- *	available and buffer pointer to the space which is now allocated and
- *	accounted for as ready for normal characters. This is used for drivers
- *	that need their own block copy routines into the buffer. There is no
- *	guarantee the buffer is a DMA target!
- */
-
-int tty_prepare_flip_string(struct tty_port *port, unsigned char **chars,
-		size_t size)
+int tty_prepare_flip_string(struct tty_port *port, u8 **chars, size_t size)
 {
 	int space = __tty_buffer_request_room(port, size, TTYB_NORMAL);
 	if (likely(space)) {
@@ -454,8 +425,8 @@ EXPORT_SYMBOL_GPL(tty_prepare_flip_string);
  *
  *	Returns the number of bytes processed
  */
-int tty_ldisc_receive_buf(struct tty_ldisc *ld, const unsigned char *p,
-			  const char *f, int count)
+size_t tty_ldisc_receive_buf(struct tty_ldisc *ld, const u8 *p, const char *f,
+			     size_t count)
 {
 	if (ld->ops->receive_buf2)
 		count = ld->ops->receive_buf2(ld->tty, p, f, count);
@@ -474,8 +445,48 @@ receive_buf(struct tty_port *port, struct tty_buffer *head, int count)
 	unsigned char *p = char_buf_ptr(head, head->read);
 	const char *f = NULL;
 	int n;
+	while (head) {
+		struct tty_buffer *next;
+		unsigned int count;
 
-	if (~head->flags & TTYB_NORMAL)
+		/*
+		 * Paired w/ release in __tty_buffer_request_room();
+		 * ensures commit value read is not stale if the head
+		 * is advancing to the next buffer.
+		 */
+		next = smp_load_acquire(&head->next);
+		/*
+		 * Paired w/ release in __tty_buffer_request_room() or in
+		 * tty_buffer_flush(); ensures we see the committed buffer data.
+		 */
+		count = smp_load_acquire(&head->commit) - head->lookahead;
+		if (!count) {
+			head = next;
+			continue;
+		}
+
+		if (port->client_ops->lookahead_buf) {
+			u8 *p, *f = NULL;
+
+			p = char_buf_ptr(head, head->lookahead);
+			if (head->flags)
+				f = flag_buf_ptr(head, head->lookahead);
+
+			port->client_ops->lookahead_buf(port, p, f, count);
+		}
+
+		head->lookahead += count;
+	}
+}
+
+static size_t
+receive_buf(struct tty_port *port, struct tty_buffer *head, size_t count)
+{
+	u8 *p = char_buf_ptr(head, head->read);
+	const u8 *f = NULL;
+	size_t n;
+
+	if (head->flags)
 		f = flag_buf_ptr(head, head->read);
 
 	n = port->client_ops->receive_buf(port, p, f, count);
@@ -564,6 +575,11 @@ EXPORT_SYMBOL(tty_flip_buffer_push);
  *	Set up the initial state of the buffer management for a tty device.
  *	Must be called before the other tty buffer functions are used.
  */
+int tty_insert_flip_string_and_push_buffer(struct tty_port *port,
+					   const u8 *chars, size_t size)
+{
+	struct tty_bufhead *buf = &port->buf;
+	unsigned long flags;
 
 void tty_buffer_init(struct tty_port *port)
 {
