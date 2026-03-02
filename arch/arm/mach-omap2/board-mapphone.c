@@ -67,6 +67,7 @@
 
 #include "pm.h"
 #include "prm-regbits-34xx.h"
+#include "cm-regbits-34xx.h"
 #include "smartreflex.h"
 #include "omap3-opp.h"
 #include "sdram-toshiba-hynix-numonyx.h"
@@ -80,10 +81,12 @@
 #if defined(CONFIG_VIDEO_MT9P012) || defined(CONFIG_VIDEO_MT9P012_MODULE)
 #include <media/mt9p012.h>
 #endif
+#if defined(CONFIG_VIDEO_OV8810) || defined(CONFIG_VIDEO_OV8810_MODULE)
+#include <media/ov8810.h>
+#endif
 #if defined(CONFIG_VIDEO_CAM_ISE) || defined(CONFIG_VIDEO_CAM_ISE_MODULE)
 #include <media/camise.h>
 #endif
-
 #ifdef CONFIG_VIDEO_OMAP3_HPLENS
 #include <../drivers/media/video/hplens.h>
 #endif
@@ -100,11 +103,17 @@
 #define ATMXT_NAME	"placeholder"
 #define CYTTSP_NAME	"placeholder"
 
-#define MAPPHONE_LM_3530_INT_GPIO	92
+#define MAPPHONE_IPC_USB_SUSP_GPIO	142
+#define MAPPHONE_AUDIO_PATH_GPIO	143
+#define MAPPHONE_BP_READY2_AP_GPIO	59
+#define MAPPHONE_BPWAKE_STROBE_GPIO	157
+#define MAPPHONE_APWAKE_TRIGGER_GPIO	141
+#define MAPPHONE_AIRC_INT_GPIO		180
+#define MAPPHONE_LM_3530_INT_GPIO	29
 #define MAPPHONE_AKM8973_INT_GPIO	175
 #define MAPPHONE_POWER_OFF_GPIO		176
-#define MAPPHONE_BT_RESET_GPIO 21 //get_gpio_by_name("bt_reset_b")
-#define WILINK_UART_DEV_NAME "/dev/ttyS1"
+#define MAPPHONE_BT_RESET_GPIO		179 //get_gpio_by_name("bt_reset_b")
+#define WILINK_UART_DEV_NAME		"/dev/ttyS1"
 
 /* CPCAP Defines */
 #define CPCAP_SMPS_VOL_OPP1        0x02
@@ -123,7 +132,7 @@
 #define I2C_MAX_DEV_NAME_LEN 16
 #define I2C_BUS_PROP_NAME_LEN 12
 
-char *bp_model = "UMTS";
+char *bp_model = "CDMA";
 
 static struct cpuidle_params mapphone_cpuidle_params_table[] = {
 	/* C1 */
@@ -157,24 +166,47 @@ static void __init mapphone_init_irq(void)
 	omap_gpio_init();
 }
 
-/* Platform device structure for the SIM driver */
-struct platform_device sim_device = {
-	.name = "sim",
-	.id = 1,
-};
-
-static bool sim_available = 1;
-
-bool is_sim_available(void)
+static int __init mapphone_audio_init(void)
 {
-	return sim_available ? 1 : 0;
-}
-EXPORT_SYMBOL(is_sim_available);
+	struct device_node *dt_node;
+	const void *dt_prop;
+	unsigned int is_uart_en = 0;
+	int hs_switch = -1;
 
-static void mapphone_sim_init(void)
-{
-	if (platform_device_register(&sim_device))
-		printk(KERN_ERR" SIM device registration failed.\n");
+	gpio_request(MAPPHONE_AUDIO_PATH_GPIO, "mapphone audio path");
+	gpio_direction_output(MAPPHONE_AUDIO_PATH_GPIO, 1);
+
+	/* Enable headset audio unless uart debug is enabled in devtree */
+	dt_node = of_find_node_by_path(DT_HIGH_LEVEL_FEATURE);
+	if (NULL != dt_node) {
+		dt_prop = of_get_property(dt_node,
+				DT_HIGH_LEVEL_FEATURE_HEADSET_UART_EN, NULL);
+		if (NULL != dt_prop) {
+			is_uart_en = *(u8 *)dt_prop;
+			printk(KERN_INFO "feature_headset_uart_en %d\n",
+								is_uart_en);
+
+			/* Get the headset switch gpio number from devtree */
+			hs_switch = get_gpio_by_name("headset_uart_switch");
+			if (hs_switch < 0)
+				return -EINVAL;
+
+			/* configure headset switch gpio as output and
+			   direction based on devtree setting */
+			gpio_request(hs_switch,
+					"mapphone audio headset uart switch");
+
+			if (is_uart_en == 0) {
+				/* route audio out headset jack */
+				gpio_direction_output(hs_switch, 1);
+			} else {
+				/* route kernel uart out headset jack */
+				gpio_direction_output(hs_switch, 0);
+			}
+		}
+	}
+
+	return 0;
 }
 
 static struct omap_uart_config mapphone_uart_config __initdata = {
@@ -1110,6 +1142,37 @@ static struct lm3554_platform_data mapphone_camera_flash_3554 = {
 	.gpio_reg_def = 0x0,
 };
 
+static struct lm3559_platform_data mapphone_camera_flash_3559;
+
+static struct lm3559_platform_data mapphone_camera_flash_3559 = {
+	.flags		= (LM3559_PRIVACY | LM3559_TORCH |
+				   LM3559_FLASH | LM3559_FLASH_LIGHT |
+				   LM3559_MSG_IND | LM3559_ERROR_CHECK),
+	.enable_reg_def = 0x00,
+	.gpio_reg_def = 0x00,
+	.adc_delay_reg_def = 0xc0,
+	.vin_monitor_def = 0xff,
+	.torch_brightness_def = 0x5b,
+	.flash_brightness_def = 0xaa,
+	.flash_duration_def = 0x0f,
+	.flag_reg_def = 0x00,
+	.config_reg_1_def = 0x6a,
+	.config_reg_2_def = 0x00,
+	.privacy_reg_def = 0x10,
+	.msg_ind_reg_def = 0x00,
+	.msg_ind_blink_reg_def = 0x1f,
+	.pwm_reg_def = 0x00,
+	.torch_enable_val = 0x1a,
+	.flash_enable_val = 0x1b,
+	.privacy_enable_val = 0x19,
+	.pwm_val = 0x02,
+	.msg_ind_val = 0xa0,
+	.msg_ind_blink_val = 0x1f,
+};
+
+#ifdef CONFIG_SENSORS_AIRC
+extern struct airc_platform_data mapphone_airc_data;
+#endif
 #ifdef CONFIG_INPUT_ALS_IR_ISL29030
 extern struct isl29030_platform_data isl29030_pdata;
 #endif
@@ -1133,6 +1196,13 @@ static struct i2c_board_info __initdata
 		.platform_data = &omap3430_als_light_data,
 		.irq = OMAP_GPIO_IRQ(MAPPHONE_LM_3530_INT_GPIO),
 	},
+#ifdef CONFIG_SENSORS_AIRC
+	{
+		I2C_BOARD_INFO("airc", 0x50),
+		.platform_data = &mapphone_airc_data,
+		.irq = OMAP_GPIO_IRQ(MAPPHONE_AIRC_INT_GPIO),
+	},
+#endif
 #ifdef CONFIG_INPUT_ALS_IR_ISL29030
 	{
 		I2C_BOARD_INFO(LD_ISL29030_NAME, 0x44),
@@ -1141,6 +1211,7 @@ static struct i2c_board_info __initdata
 #endif
 };
 
+extern struct lis331dlh_platform_data mapphone_lis331dlh_data;
 extern struct akm8975_platform_data mapphone_akm8975_pdata;
 
 static struct i2c_board_info __initdata
@@ -1149,6 +1220,13 @@ static struct i2c_board_info __initdata
 		I2C_BOARD_INFO("akm8973", 0x1C),
 		.irq = OMAP_GPIO_IRQ(MAPPHONE_AKM8973_INT_GPIO),
 	},
+#ifdef CONFIG_SENSORS_LIS331DLH
+	{
+		I2C_BOARD_INFO("lis331dlh", 0x19),
+		.platform_data = &mapphone_lis331dlh_data,
+	},
+#endif
+
 	{
 		I2C_BOARD_INFO("kxtf9", 0x0F),
 		.platform_data = &mapphone_kxtf9_data,
@@ -1172,11 +1250,21 @@ static struct i2c_board_info __initdata
 		.platform_data = &mapphone_mt9p012_platform_data,
 	},
 #endif
-
+#if defined(CONFIG_VIDEO_OV8810)
+	{
+		I2C_BOARD_INFO("ov8810", OV8810_I2C_ADDR),
+		.platform_data = &mapphone_ov8810_platform_data,
+	},
+#endif
 #ifdef CONFIG_VIDEO_OMAP3_HPLENS
 	{
 		I2C_BOARD_INFO("HP_GEN_LENS", 0x04),
 		.platform_data = &mapphone_hplens_platform_data,
+	},
+#endif
+#ifdef CONFIG_HDMI_TDA19989
+	{
+		I2C_BOARD_INFO("tda19989", 0x70),
 	},
 #endif
 #if defined(CONFIG_VIDEO_CAM_ISE)
@@ -1185,6 +1273,12 @@ static struct i2c_board_info __initdata
 		.platform_data = &mapphone_camise_platform_data,
 	},
 #endif
+	/* LM3559 must be the last element in the array,
+		new devices need to be added above */
+	{
+		I2C_BOARD_INFO("lm3559_led", 0x53),
+		.platform_data = &mapphone_camera_flash_3559,
+	},
 };
 
 static struct i2c_board_info *get_board_info
@@ -1217,9 +1311,30 @@ static struct i2c_board_info *get_board_info
 void initialize_device_specific_data(void)
 {
 #ifdef CONFIG_ARM_OF
+	u8 dev_available = 0;
 	struct device_node *node;
 	int len = 0;
 	const uint32_t *val;
+
+	/* Check camera flash led type */
+	/* LM3559 */
+	node = of_find_node_by_path(DT_PATH_LM3559);
+	if (node != NULL) {
+		val =
+			of_get_property(node, "device_available", &len);
+		if (val && len)
+			dev_available =  *(u8 *)val;
+	}
+
+	if (dev_available) {
+		val =
+			of_get_property(
+				node, "lm3559_flags", &len);
+		if (val && len)
+			mapphone_camera_flash_3559.flags = *val;
+		else
+			pr_err("%s: Can't get flags\n", __func__);
+	}
 
 	/* LM3554 */
 	node = of_find_node_by_path(DT_PATH_LM3554);
@@ -1268,7 +1383,7 @@ static int initialize_i2c_bus_info
 			prop_name, NULL);
 	if (NULL != feat_prop) {
 		device_names = (char *)feat_prop;
-		pr_debug(KERN_DEBUG
+		printk(KERN_INFO
 			"I2C-%d devices: %s\n", bus_num, device_names);
 		device_name_len = strlen(device_names);
 
@@ -1295,7 +1410,7 @@ static int initialize_i2c_bus_info
 							master_entry,
 							sizeof(
 							struct i2c_board_info));
-						pr_debug(KERN_DEBUG
+						printk(KERN_INFO
 							"%s -> I2C bus-%d\n",
 							master_entry->type,
 							bus_num);
@@ -1359,6 +1474,7 @@ arch_initcall(mapphone_i2c_init);
 
 static void __init mapphone_serial_init(void)
 {
+	int bpwake_strobe_gpio = MAPPHONE_BPWAKE_STROBE_GPIO;
 	struct device_node *uart_node;
 	const void *uart_prop;
 	struct device_node *dt_node;
@@ -1399,7 +1515,18 @@ static void __init mapphone_serial_init(void)
 		of_node_put(dt_node);
 	}
 
-	omap_serial_init();
+	omap_cfg_reg(AA8_34XX_UART1_TX);
+	omap_cfg_reg(Y8_34XX_UART1_RX);
+	omap_cfg_reg(AA9_34XX_UART1_RTS);
+	omap_cfg_reg(W8_34XX_UART1_CTS);
+	omap_cfg_reg(AA25_34XX_UART2_TX);
+	omap_cfg_reg(AD25_34XX_UART2_RX);
+	omap_cfg_reg(AB25_34XX_UART2_RTS);
+	omap_cfg_reg(AB26_34XX_UART2_CTS);
+	bpwake_strobe_gpio = get_gpio_by_name("ipc_bpwake_strobe");
+	if (bpwake_strobe_gpio < 0)
+		bpwake_strobe_gpio = MAPPHONE_BPWAKE_STROBE_GPIO;
+	omap_serial_init(bpwake_strobe_gpio, 0x01);
 }
 
 static struct prm_setup_vc mapphone_prm_setup = {
@@ -1478,11 +1605,94 @@ u32 omap_pmic_voltage_ramp_delay(u8 srid, u8 target_vsel, u8 current_vsel)
 }
 #endif
 
+/* Mapphone specific BP */
+
+extern void omap_uart_block_sleep(int num);
+static struct wake_lock baseband_wakeup_wakelock;
+static irqreturn_t mapphone_bpwake_irqhandler(int irq, void *unused)
+{
+	omap_uart_block_sleep(0);
+	/*
+	 * uart_block_sleep keeps uart clock active for 500 ms,
+	 * prevent suspend for 1 sec to be safe
+	 */
+	wake_lock_timeout(&baseband_wakeup_wakelock, HZ);
+	return IRQ_HANDLED;
+}
+
+static int mapphone_bpwake_probe(struct platform_device *pdev)
+{
+	int rc;
+
+	int apwake_trigger_gpio;
+	apwake_trigger_gpio = get_gpio_by_name("ipc_apwake_trigger");
+	if (apwake_trigger_gpio < 0)
+		apwake_trigger_gpio = MAPPHONE_APWAKE_TRIGGER_GPIO;
+
+	gpio_request(apwake_trigger_gpio, "BP -> AP IPC trigger");
+	gpio_direction_input(apwake_trigger_gpio);
+
+	wake_lock_init(&baseband_wakeup_wakelock, WAKE_LOCK_SUSPEND, "bpwake");
+
+	rc = request_irq(gpio_to_irq(apwake_trigger_gpio),
+			 mapphone_bpwake_irqhandler,
+			 IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+			 "Remote Wakeup", NULL);
+	if (rc) {
+		wake_lock_destroy(&baseband_wakeup_wakelock);
+		printk(KERN_ERR
+		       "Failed requesting APWAKE_TRIGGER irq (%d)\n", rc);
+		return rc;
+	}
+	enable_irq_wake(gpio_to_irq(apwake_trigger_gpio));
+	return 0;
+}
+
+static int mapphone_bpwake_remove(struct platform_device *pdev)
+{
+	int apwake_trigger_gpio ;
+
+	wake_lock_destroy(&baseband_wakeup_wakelock);
+	apwake_trigger_gpio = get_gpio_by_name("ipc_apwake_trigger");
+	if (apwake_trigger_gpio < 0)
+		apwake_trigger_gpio = MAPPHONE_APWAKE_TRIGGER_GPIO;
+	free_irq(gpio_to_irq(apwake_trigger_gpio), NULL);
+	return 0;
+}
+
+static int mapphone_bpwake_suspend(struct platform_device *pdev,
+					pm_message_t state)
+{
+	return 0;
+}
+
+static int mapphone_bpwake_resume(struct platform_device *pdev)
+{
+	return 0;
+}
+
+static struct platform_driver mapphone_bpwake_driver = {
+	.probe		= mapphone_bpwake_probe,
+	.remove		= mapphone_bpwake_remove,
+	.suspend	= mapphone_bpwake_suspend,
+	.resume		= mapphone_bpwake_resume,
+	.driver		= {
+		.name		= "mapphone_bpwake",
+		.owner		= THIS_MODULE,
+	},
+};
+
+static struct platform_device mapphone_bpwake_device = {
+	.name		= "mapphone_bpwake",
+	.id		= -1,
+	.num_resources	= 0,
+};
+
 
 #define WARMRESET 1
 #define COLDRESET 0
 
-static unsigned long reset_status = COLDRESET ;
+static unsigned long reset_status = COLDRESET;
 static struct notifier_block mapphone_pm_reboot_notifier;
 
 /* Choose cold or warm reset
@@ -1528,6 +1738,10 @@ static void mapphone_pm_init(void)
 	omap3_bypass_cmd(CPCAP_SRI2C_SLAVE_ADDR_VDD2,
 			CPCAP_SMPS_VOL_OPP2, 0x2E);
 
+	/* Configure BP <-> AP wake pins */
+	omap_cfg_reg(AA21_34XX_GPIO157_OUT);
+	omap_cfg_reg(AE6_34XX_GPIO141_DOWN);
+
 	if (reset_status == COLDRESET)
 		mapphone_pm_set_reset(1);
 	else
@@ -1535,6 +1749,8 @@ static void mapphone_pm_init(void)
 
 	register_reboot_notifier(&mapphone_pm_reboot_notifier);
 
+	platform_device_register(&mapphone_bpwake_device);
+	platform_driver_register(&mapphone_bpwake_driver);
 }
 
 static int mapphone_pm_reboot_call(struct notifier_block *this,
@@ -1555,6 +1771,73 @@ static struct notifier_block mapphone_pm_reboot_notifier = {
 };
 
 
+static struct proc_dir_entry *proc_entry;
+
+ssize_t reset_proc_read(char *page, char **start, off_t off, \
+   int count, int *eof, void *data)
+{
+	int len;
+    /* don't visit offset */
+	if (off > 0) {
+		*eof = 1;
+		return 0;
+	}
+	len = snprintf(page, sizeof(page), "%x\n", (unsigned int)reset_status);
+	return len;
+}
+
+ssize_t reset_proc_write(struct file *filp, const char __user *buff, \
+  unsigned long len, void *data)
+{
+#define MAX_UL_LEN 8
+	char k_buf[MAX_UL_LEN];
+	int count = min((unsigned long)MAX_UL_LEN, len);
+	int ret;
+
+	if (copy_from_user(k_buf, buff, count)) {
+		ret = -EFAULT;
+		goto err;
+	} else{
+		if (k_buf[0] == '0') {
+			reset_status = COLDRESET;
+			mapphone_pm_set_reset(1);
+			printk(KERN_ERR"switch to cold reset\n");
+		} else if (k_buf[0] == '1') {
+			reset_status = WARMRESET;
+			mapphone_pm_set_reset(0);
+			printk(KERN_ERR"switch to warm reset\n");
+		} else{
+			ret = -EFAULT;
+			goto err;
+		}
+		return count;
+	}
+err:
+	return ret;
+}
+
+static void  reset_proc_init(void)
+{
+	proc_entry = create_proc_entry("reset_proc", 0660, NULL);
+	if (proc_entry == NULL) {
+		printk(KERN_INFO"Couldn't create proc entry\n");
+	} else{
+		proc_entry->read_proc = reset_proc_read;
+		proc_entry->write_proc = reset_proc_write;
+		/* proc_entry->owner = THIS_MODULE; */
+	}
+}
+
+int __init warmreset_init(char *s)
+{
+	/* configure to warmreset */
+	reset_status = WARMRESET;
+	mapphone_pm_set_reset(0);
+	return 1;
+}
+__setup("warmreset_debug=", warmreset_init);
+
+
 /* must match value in drivers/w1/w1_family.h */
 #define W1_EEPROM_DS2502        0x89
 static struct omap2_hdq_platform_config mapphone_hdq_data = {
@@ -1571,14 +1854,28 @@ static int __init omap_hdq_init(void)
 
 #if defined(CONFIG_BT_WILINK) || defined (CONFIG_BT_WILINK_MODULE) 
 
+/* TODO: handle suspend/resume here.
+* Upon every suspend, make sure the wilink chip is capable enough to wake-up the
+* OMAP host.
+*/
+static int plat_wlink_kim_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	return 0;
+}
+
+static int plat_wlink_kim_resume(struct platform_device *pdev)
+{
+	return 0;
+}
+
 /* wl127x BT, FM, GPS connectivity chip */
 struct ti_st_plat_data wilink_pdata = {
 	.nshutdown_gpio = MAPPHONE_BT_RESET_GPIO, 
 	.dev_name = WILINK_UART_DEV_NAME,
 	.flow_cntrl = 1,
 	.baud_rate = 3686400,
-	.suspend = 0,
-	.resume = 0,
+	.suspend = plat_wlink_kim_suspend,
+	.resume = plat_wlink_kim_resume,
 };
 static struct platform_device wl127x_device = {
 	.name           = "kim",
@@ -1654,6 +1951,55 @@ static void __init mapphone_bt_init(void)
 
 #endif
 
+static struct omap_vout_config mapphone_vout_platform_data = {
+	.max_width = 1280,
+	.max_height = 720,
+	.max_buffer_size = 0x1C3000,
+	.num_buffers = 9, /* 8 for camera/video playback, 1 for HDMI */
+	.num_devices = 2,
+	.device_ids = {1, 2},
+};
+
+static struct platform_device mapphone_vout_device = {
+	.name = "omapvout",
+	.id = -1,
+	.dev = {
+		.platform_data = &mapphone_vout_platform_data,
+	},
+};
+
+static void __init mapphone_vout_init(void)
+{
+#ifdef CONFIG_ARM_OF
+	struct device_node *panel_node;
+	const void *panel_prop;
+	struct omap_vout_config *platform_data;
+
+	panel_node = of_find_node_by_path(DT_PATH_VIDEO_OUT);
+
+	if (panel_node != NULL) {
+		platform_data = (struct omap_vout_config *)
+			mapphone_vout_device.dev.platform_data;
+
+		panel_prop = of_get_property(panel_node, "max_width", NULL);
+		if (panel_prop)
+			platform_data->max_width = *(u16 *)panel_prop;
+
+		panel_prop = of_get_property(panel_node, "max_height", NULL);
+		if (panel_prop)
+			platform_data->max_height = *(u16 *)panel_prop;
+
+		panel_prop = of_get_property(panel_node, "max_buffer_size",
+						 NULL);
+		if (panel_prop)
+			platform_data->max_buffer_size = *(u32 *)panel_prop;
+
+		of_node_put(panel_node);
+	}
+#endif
+	platform_device_register(&mapphone_vout_device);
+}
+
 static struct omap_musb_board_data musb_board_data = {
 	.interface_type         = MUSB_INTERFACE_ULPI,
 #ifdef CONFIG_USB_MUSB_OTG
@@ -1666,21 +2012,20 @@ static struct omap_musb_board_data musb_board_data = {
 	.power                  = 100,
 };
 
-
 static struct platform_device mapphone_sgx_device = {
-       .name                   = "pvrsrvkm",
-       .id             = -1,
+       .name = "pvrsrvkm",
+       .id = -1,
 };
 static struct platform_device mapphone_omaplfb_device = {
-	.name			= "omaplfb",
-	.id			= -1,
+.name	= "omaplfb",
+.id	= -1,
 };
 
 
 static void __init mapphone_sgx_init(void)
 {
-	platform_device_register(&mapphone_sgx_device);
-	platform_device_register(&mapphone_omaplfb_device);
+platform_device_register(&mapphone_sgx_device);
+platform_device_register(&mapphone_omaplfb_device);
 }
 
 static void __init mapphone_bp_model_init(void)
@@ -1688,6 +2033,7 @@ static void __init mapphone_bp_model_init(void)
 #ifdef CONFIG_OMAP_RESET_CLOCKS
 	struct clk *clkp;
 #endif
+#ifdef CONFIG_ARM_OF
 	struct device_node *bp_node;
 	const void *bp_prop;
 
@@ -1698,6 +2044,7 @@ static void __init mapphone_bp_model_init(void)
 
 		of_node_put(bp_node);
 	}
+#endif
 #ifdef CONFIG_OMAP_RESET_CLOCKS
 	/* Enable sad2d iclk */
 	clkp = clk_get(NULL, "sad2d_ick");
@@ -1705,6 +2052,7 @@ static void __init mapphone_bp_model_init(void)
 		clk_enable(clkp);
 #endif
 }
+static struct platform_driver cpcap_charger_connected_driver;
 
 static void mapphone_pm_power_off(void)
 {
@@ -1731,7 +2079,35 @@ static void __init mapphone_power_off_init(void)
 	omap_writew(0x1F, 0x480021D2);
 	pm_power_off = mapphone_pm_power_off;
 
+	platform_driver_register(&cpcap_charger_connected_driver);
 }
+
+static void mapphone_pm_reset(void)
+{
+	arch_reset('h', NULL);
+}
+
+static int cpcap_charger_connected_probe(struct platform_device *pdev)
+{
+	pm_power_off = mapphone_pm_reset;
+	return 0;
+}
+
+static int cpcap_charger_connected_remove(struct platform_device *pdev)
+{
+	pm_power_off = mapphone_pm_power_off;
+	return 0;
+}
+
+static struct platform_driver cpcap_charger_connected_driver = {
+	.probe		= cpcap_charger_connected_probe,
+	.remove		= cpcap_charger_connected_remove,
+	.driver		= {
+		.name	= "cpcap_charger_connected",
+		.owner	= THIS_MODULE,
+	},
+};
+
 
 static void __init mapphone_init(void)
 {
@@ -1749,21 +2125,23 @@ static void __init mapphone_init(void)
 		pr_err("failed to create board_properties\n");
 
 	omap_register_ion();
-	mapphone_padconf_init();
 	mapphone_bp_model_init();
+	mapphone_padconf_init();
 #ifdef CONFIG_EMU_UART_DEBUG
 	/* emu-uart function will override devtree iomux setting */
 	activate_emu_uart();
 #endif
 	mapphone_gpio_mapping_init();
+	mapphone_mdm_ctrl_init();
 	mapphone_spi_init();
 	mapphone_cpcap_client_init();
-	mapphone_camera_init();
 	mapphone_serial_init();
 	mapphone_als_init();
 	mapphone_panel_init();
 	mapphone_sensors_init();
+	mapphone_camera_init();
 	mapphone_touch_init();
+	mapphone_audio_init();
 	usb_musb_init(&musb_board_data);
 	mapphone_ehci_init();
 	mapphone_pm_init();
@@ -1773,10 +2151,11 @@ static void __init mapphone_init(void)
 #else
 	mapphone_bt_init();
 #endif
+	mapphone_vout_init();
 	mapphone_hsmmc_init();
 	mapphone_sgx_init();
 	mapphone_power_off_init();
-	mapphone_sim_init();
+	reset_proc_init();
 }
 
 static void __init mapphone_reserve(void)

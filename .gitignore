@@ -59,6 +59,7 @@ include/generated
 arch/arm/boot/compressed/piggy.xzkern
 arch/arm/boot/compressed/piggy.gzip
 arch/arm/boot/compressed/ashldi3.S
+arch/arm/configs/shadow_cm11_defconfig									  
 
 # stgit generated dirs
 patches-*

@@ -717,7 +717,8 @@ void __init omap_uart_set_uart0_padconf(int padconf)
 	uart0_padconf = padconf;
 }
 
-void __init omap_serial_init()
+void __init omap_serial_init(int wake_gpio_strobe,
+			     unsigned int wake_strobe_enable_mask)
 {
 	int i;
 	const struct omap_uart_config *info;

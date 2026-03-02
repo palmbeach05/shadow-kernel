@@ -44,6 +44,12 @@
 #ifndef CONFIG_PANEL_MAPPHONE_HDTV
 #error CONFIG_PANEL_MAPPHONE_HDTV must be defined for Mapphone to compile
 #endif
+//#ifndef CONFIG_OMAP2_DSS_DISPSW
+//#error CONFIG_OMAP2_DSS_DISPSW must be defined for Mapphone to compile
+//#endif
+//#ifndef CONFIG_HDMI_TDA19989
+//#error CONFIG_HDMI_TDA19989 must be defined for Mapphone to compile
+//#endif
 #ifndef CONFIG_USER_PANEL_DRIVER
 #error CONFIG_USER_PANEL_DRIVER must be defined for Mapphone to compile
 #endif
@@ -697,14 +703,8 @@ void __init mapphone_panel_init(void)
 	ret = gpio_request(mapphone_lcd_device.reset_gpio, "display reset");
 	if (ret) {
 		printk(KERN_ERR "failed to get display reset gpio\n");
-		goto error;
+		goto failed_reset;
 	}
-
-	first_boot = true;
-
-	gpio_direction_output(mapphone_lcd_device.reset_gpio, 1);
-
-	mapphone_feature_hdmi = false;
 
 	if (mapphone_feature_hdmi) {
 		ret = gpio_request(mapphone_hdtv_mux_en_gpio,
@@ -724,6 +724,7 @@ void __init mapphone_panel_init(void)
 		}
 		gpio_direction_output(mapphone_hdtv_mux_sel_gpio, 0);
 		gpio_set_value(mapphone_hdtv_mux_sel_gpio, 0);
+
 #ifdef CONFIG_OMAP2_DSS_DISPSW
 		platform_device_register(&mapphone_dispsw_device);
 #endif
@@ -741,10 +742,10 @@ void __init mapphone_panel_init(void)
 	return;
 
 failed_mux_sel:
-	gpio_free(mapphone_hdtv_mux_en_gpio);
+	gpio_free(mapphone_hdtv_mux_sel_gpio);
 failed_mux_en:
+	gpio_free(mapphone_hdtv_mux_en_gpio);
+failed_reset:
 	gpio_free(mapphone_lcd_device.reset_gpio);
-error:
-	return;
 }
 

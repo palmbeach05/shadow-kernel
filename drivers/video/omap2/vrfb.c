@@ -157,7 +157,7 @@ EXPORT_SYMBOL(omap_vrfb_max_height);
 
 void omap_vrfb_setup(struct vrfb *vrfb, unsigned long paddr,
 		u16 width, u16 height,
-		unsigned bytespp, bool yuv_mode)
+		unsigned bytespp, bool yuv_mode, int rotation)
 {
 	unsigned pixel_size_exp;
 	u16 temp;

@@ -77,8 +77,9 @@ obj-$(CONFIG_MACH_MAPPHONE)             += board-mapphone.o \
                                            board-mapphone-keypad.o \
                                            board-mapphone-wifi.o \
                                            board-mapphone-gpio.o \
+                                           board-mapphone-modem.o \
                                            board-mapphone-usb.o \
-					   board-mapphone-padconf.o
+                                           board-mapphone-padconf.o
 
 obj-$(CONFIG_EMU_UART_DEBUG)		+= board-mapphone-emu_uart.o
 

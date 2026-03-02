@@ -10,4 +10,5 @@ dtb-$(CONFIG_MAPPHONE_DTC) += umts_milestone2-prod.dtb
 dtb-$(CONFIG_MAPPHONE_DTC) += umts_milestone2-eng.dtb
 dtb-$(CONFIG_MAPPHONE_DTC) += umts_bravo-prod.dtb
 dtb-$(CONFIG_MAPPHONE_DTC) += umts_defy-prod.dtb
+dtb-$(CONFIG_MAPPHONE_DTC) += cdma_shadow-prod.dtb
 

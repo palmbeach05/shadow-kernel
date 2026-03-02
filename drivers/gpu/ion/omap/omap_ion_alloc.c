@@ -273,7 +273,7 @@ int omap_setup_vrfb_buffer(struct dss2_ovl_info *ovl_info)
 		omap_vrfb_setup(&ion_vrfb_t[i].vrfb_context,
 				ovl_info->ba, ovl_info->cfg.crop.w,
 				ovl_info->cfg.crop.h, get_bpp(mode),
-				is_yuv_mode(mode));
+				is_yuv_mode(mode), ovl_info->cfg.rotation);
 
 		ovl_info->ba = ion_vrfb_t[i].
 				vrfb_context.paddr[ovl_info->cfg.rotation]
