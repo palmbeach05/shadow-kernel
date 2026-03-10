@@ -177,6 +177,12 @@ void omap_vrfb_setup(struct vrfb *vrfb, unsigned long paddr,
 		width /= 2;
 	}
 
+	if (rotation == 1 || rotation == 3) {
+		temp = width;
+		width = height;
+		height = temp;
+	}
+
 	if (bytespp == 4)
 		pixel_size_exp = 2;
 	else if (bytespp == 2)

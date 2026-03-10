@@ -745,6 +745,9 @@ void __init omap_serial_init(int wake_gpio_strobe,
 			continue;
 		}
 
+		if (wake_strobe_enable_mask & (1 << i))
+			p->wake_gpio_strobe = wake_gpio_strobe;
+
 		sprintf(name, "uart%d_ick", i+1);
 		uart->ick = clk_get(NULL, name);
 		if (IS_ERR(uart->ick)) {

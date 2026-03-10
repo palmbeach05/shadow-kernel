@@ -301,7 +301,7 @@
 /*------------------------------------------------------------------------*/
 
 #define VENDOR_NAME_ANDROID	"Motorola"
-#define PRODUCT_NAME_ANDROID	"MB526"
+#define PRODUCT_NAME_ANDROID	"DROIDX"
 
 #define FSG_DRIVER_DESC		"Mass Storage Function"
 #define FSG_DRIVER_VERSION	"2009/09/11"
