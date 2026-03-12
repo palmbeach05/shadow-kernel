@@ -1341,11 +1341,11 @@ static void iface_stat_update_from_skb(const struct sk_buff *skb,
 	}
 
 	if (unlikely(!el_dev)) {
-		pr_err_ratelimited("qtaguid[%d]: %s(): no par->in/out?!!\n",
+		pr_warn_once("qtaguid[%d]: %s(): no par->in/out?!!\n",
 				   par->hooknum, __func__);
 		BUG();
 	} else if (unlikely(!el_dev->name)) {
-		pr_err_ratelimited("qtaguid[%d]: %s(): no dev->name?!!\n",
+		pr_warn_once("qtaguid[%d]: %s(): no dev->name?!!\n",
 				   par->hooknum, __func__);
 		BUG();
 	} else {
@@ -1429,7 +1429,7 @@ static void if_tag_stat_update(const char *ifname, uid_t uid,
 
 	iface_entry = get_iface_entry(ifname);
 	if (!iface_entry) {
-		pr_err_ratelimited("qtaguid: iface_stat: stat_update() "
+		pr_warn_once("qtaguid: iface_stat: stat_update() "
 				   "%s not found\n", ifname);
 		return;
 	}
