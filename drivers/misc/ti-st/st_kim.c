@@ -707,17 +707,17 @@ static int kim_probe(struct platform_device *pdev)
 
 	/* Claim the chip enable nShutdown gpio from the system */
 	kim_gdata->nshutdown = pdata->nshutdown_gpio;
-	status = gpio_request(kim_gdata->nshutdown, "kim");
-	if (unlikely(status)) {
+	err = gpio_request(kim_gdata->nshutdown, "kim");
+	if (unlikely(err)) {
 		pr_err(" gpio %ld request failed ", kim_gdata->nshutdown);
-		return status;
+		return err;
 	}
 
 	/* Configure nShutdown GPIO as output=0 */
-	status = gpio_direction_output(kim_gdata->nshutdown, 0);
-	if (unlikely(status)) {
+	err = gpio_direction_output(kim_gdata->nshutdown, 0);
+	if (unlikely(err)) {
 		pr_err(" unable to configure gpio %ld", kim_gdata->nshutdown);
-		return status;
+		return err;
 	}
 	/* get reference of pdev for request_firmware
 	 */
