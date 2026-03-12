@@ -37,6 +37,9 @@
 #include <linux/ti_wilink_st.h>
 #include <linux/module.h>
 
+#ifndef pr_warn
+#define pr_warn pr_warning
+#endif
 
 #define MAX_ST_DEVICES	3	/* Imagine 1 on each UART for now */
 static struct platform_device *st_kim_devices[MAX_ST_DEVICES];
@@ -452,7 +455,7 @@ long st_kim_start(void *kim_data)
 	do {
 		/* platform specific enabling code here */
 		if (pdata->chip_enable)
-			pdata->chip_enable(kim_gdata);
+			pdata->chip_enable();
 
 		/* Configure BT nShutdown to HIGH state */
 		gpio_set_value(kim_gdata->nshutdown, GPIO_LOW);
@@ -542,7 +545,7 @@ long st_kim_stop(void *kim_data)
 
 	/* platform specific disable */
 	if (pdata->chip_disable)
-		pdata->chip_disable(kim_gdata);
+		pdata->chip_disable();
 	return err;
 }
 
