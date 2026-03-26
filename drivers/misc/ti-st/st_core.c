@@ -72,24 +72,6 @@ int st_get_uart_wr_room(struct st_data_s *st_gdata)
 	return tty->ops->write_room(tty);
 }
 
-/*
- * called from KIM during firmware download.
- *
- * This is a wrapper function to tty->ops->write_room.
- * It returns number of free space available in
- * uart tx buffer.
- */
-int st_get_uart_wr_room(struct st_data_s *st_gdata)
-{
-	struct tty_struct *tty;
-	if (unlikely(st_gdata == NULL || st_gdata->tty == NULL)) {
-		pr_err("tty unavailable to perform write");
-		return -1;
-	}
-	tty = st_gdata->tty;
-	return tty->ops->write_room(tty);
-}
-
 /* can be called in from
  * -- KIM (during fw download)
  * -- ST Core (during st_write)
