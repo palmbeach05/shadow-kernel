@@ -24,6 +24,7 @@
 
 #ifndef TI_WILINK_ST_H
 #define TI_WILINK_ST_H
+
 #include <linux/skbuff.h>
 
 /**
@@ -440,10 +441,10 @@ struct ti_st_plat_data {
 	unsigned long baud_rate;
 	int (*suspend)(struct platform_device *, pm_message_t);
 	int (*resume)(struct platform_device *);
-	int (*chip_enable) (void);
-	int (*chip_disable) (void);
-	int (*chip_asleep) (void);
-	int (*chip_awake) (void);
+	int (*chip_enable) (struct kim_data_s *);
+	int (*chip_disable) (struct kim_data_s *);
+	int (*chip_asleep) (struct kim_data_s *);
+	int (*chip_awake) (struct kim_data_s *);
 };
 
 #endif /* TI_WILINK_ST_H */
