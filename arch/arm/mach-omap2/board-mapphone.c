@@ -1858,12 +1858,11 @@ static int __init omap_hdq_init(void)
 * Upon every suspend, make sure the wilink chip is capable enough to wake-up the
 * OMAP host.
 */
-static int plat_wlink_kim_suspend(struct platform_device *pdev, pm_message_t state)
+static int plat_kim_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	return 0;
 }
-
-static int plat_wlink_kim_resume(struct platform_device *pdev)
+static int plat_kim_resume(struct platform_device *pdev)
 {
 	return 0;
 }
@@ -1874,8 +1873,8 @@ struct ti_st_plat_data wilink_pdata = {
 	.dev_name = WILINK_UART_DEV_NAME,
 	.flow_cntrl = 1,
 	.baud_rate = 3686400,
-	.suspend = plat_wlink_kim_suspend,
-	.resume = plat_wlink_kim_resume,
+	.suspend = plat_kim_suspend,
+	.resume = plat_kim_resume,
 };
 static struct platform_device wl127x_device = {
 	.name           = "kim",
