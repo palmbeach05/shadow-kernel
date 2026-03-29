@@ -214,6 +214,7 @@ static struct gpio_mapping gpio_map_table[GPIO_MAP_SIZE] = {
 	{1, 164, "touch_panel_reset"},
 	{1, 163, "mmc_detect"},
 	{1, 177, "slider_data"},
+	{1, 179, "bt_nshutdown"},
 	{1, 65, "wlan_host_wake"},
 };
 
