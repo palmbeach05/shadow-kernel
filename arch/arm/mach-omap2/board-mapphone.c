@@ -1877,21 +1877,6 @@ static int mapphone_st_set_power(struct device *dev, int on)
 		gpio_requested = true;
 	}
 
-	if (on) {
-		/* Replicating the logic removed from st_kim_start */
-		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 0); // GPIO_LOW
-		mdelay(5);
-		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 1); // GPIO_HIGH
-		mdelay(100);
-	} else {
-		/* Replicating the logic removed from st_kim_stop/init */
-		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 0); // GPIO_LOW
-		mdelay(1);
-		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 1); // GPIO_HIGH
-		mdelay(1);
-		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 0); // GPIO_LOW
-	}
-
 	return 0;
 }
 static int plat_kim_suspend(struct platform_device *pdev, pm_message_t state)
