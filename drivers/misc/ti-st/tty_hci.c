@@ -28,6 +28,7 @@
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/device.h>
+#include <linux/errno.h>
 
 #include <linux/uaccess.h>
 #include <linux/tty.h>
@@ -58,7 +59,7 @@
  */
 struct ti_st {
 	struct hci_dev *hdev;
-	char reg_status;
+	int reg_status;
 	long (*st_write) (struct sk_buff *);
 	struct completion wait_reg_completion;
 	wait_queue_head_t data_q;
@@ -93,8 +94,12 @@ static void st_reg_completion_cb(void *priv_data, char data)
 	struct ti_st	*lhst = (void *) priv_data;
 
 	pr_info("@ %s\n", __func__);
-	/* Save registration status for use in ti_st_open() */
-	lhst->reg_status = data;
+	/* 
+	 * Save registration status for use in hci_tty_open().
+	 * The callback provides a byte-sized status; widen to int explicitly
+	 * to avoid signed/unsigned char ambiguity.
+	 */
+	lhst->reg_status = (int)(signed char)data;
 	/* complete the wait in ti_st_open() */
 	complete(&lhst->wait_reg_completion);
 }
@@ -142,8 +147,13 @@ int hci_tty_open(struct inode *inod, struct file *file)
 	pr_info("inside %s (%p, %p)\n", __func__, inod, file);
 
 	hst = kzalloc(sizeof(*hst), GFP_KERNEL);
+	if (!hst)
+		return -ENOMEM;
+
 	file->private_data = hst;
-	hst = file->private_data;
+
+	skb_queue_head_init(&hst->rx_list);
+	init_waitqueue_head(&hst->data_q);
 
 	for (i = 0; i < MAX_BT_CHNL_IDS; i++) {
 		ti_st_proto[i].priv_data = hst;
@@ -161,12 +171,21 @@ int hci_tty_open(struct inode *inod, struct file *file)
 		hst->reg_status = -EINPROGRESS;
 
 		err = st_register(&ti_st_proto[i]);
-		if (!err)
-			goto done;
+		if (!err) {
+			hst->st_write = ti_st_proto[i].write;
+			if (!hst->st_write) {
+				pr_err("undefined ST write function");
+				err = -EIO;
+				goto unreg;
+			}
+			continue;
+		}
 
 		if (err != -EINPROGRESS) {
 			pr_err("st_register failed %d\n", err);
-			goto error;
+			/* this channel is not registered - don't unregister */
+			--i;
+			goto unreg;
 		}
 
 		/* ST is busy with either protocol
@@ -182,7 +201,7 @@ int hci_tty_open(struct inode *inod, struct file *file)
 					"completion signal from ST\n",
 					BT_REGISTER_TIMEOUT / 1000);
 			err = -ETIMEDOUT;
-			goto error;
+			goto unreg;
 		}
 
 		/* Is ST registration callback
@@ -191,32 +210,20 @@ int hci_tty_open(struct inode *inod, struct file *file)
 			pr_err("ST registration completed with invalid "
 					"status %d\n", hst->reg_status);
 			err = -EAGAIN;
-			goto error;
-		}
-
-done:
-		hst->st_write = ti_st_proto[i].write;
-		if (!hst->st_write) {
-			pr_err("undefined ST write function\n");
-			for (i = 0; i < MAX_BT_CHNL_IDS; i++) {
-				/* Undo registration with ST */
-				err = st_unregister(&ti_st_proto[i]);
-				if (err)
-					pr_err("st_unregister() failed with "
-							"error %d\n", err);
-				hst->st_write = NULL;
-			}
-			return -EIO;
+			goto unreg;
 		}
 	}
 
-	skb_queue_head_init(&hst->rx_list);
-	init_waitqueue_head(&hst->data_q);
-
 	return 0;
 
-error:
+unreg:
+	while (i-- >=  0)
+		/* Undo registration with ST */
+		if (st_unregister(&ti_st_proto[i]))
+			pr_err("st_unregister() failed with ");
+
 	kfree(hst);
+
 	return err;
 }
 
@@ -231,7 +238,7 @@ error:
  */
 int hci_tty_release(struct inode *inod, struct file *file)
 {
-	int err, i;
+	int err = 0, i;
 	struct ti_st *hst = file->private_data;
 
 	pr_info("inside %s (%p, %p)\n", __func__, inod, file);
@@ -283,8 +290,11 @@ ssize_t hci_tty_read(struct file *file, char __user *data, size_t size,
 	tout = wait_event_interruptible_timeout(hst->data_q,
 			!skb_queue_empty(&hst->rx_list),
 				msecs_to_jiffies(1000));
-	/* Check for timed out condition */
-	if (0 == tout) {
+	/* Signal? */
+	if (tout < 0)
+		return tout;
+	/* Timed out? */
+	if (tout == 0) {
 		pr_err("Device Read timed out\n");
 		return -ETIMEDOUT;
 	}
@@ -304,12 +314,15 @@ ssize_t hci_tty_read(struct file *file, char __user *data, size_t size,
 	/* Forward the data to the user */
 	if (skb->len >= size) {
 		pr_err("FIONREAD not done before read\n");
-		return -ENOMEM;
+		/* Put it back for a future, correctly-sized read */
+		skb_queue_head(&hst->rx_list, skb);
+		return -EMSGSIZE;
 	} else {
 		/* returning skb */
 		rskb = alloc_skb(size, GFP_KERNEL);
 		if (!rskb) {
 			pr_err("alloc_skb error\n");
+			skb_queue_head(&hst->rx_list, skb);
 			return -ENOMEM;
 		}
 
@@ -417,15 +430,16 @@ static long hci_tty_ioctl(struct file *file,
 		 * available in the available SKB +1 for the PKT_TYPE
 		 * field not provided in data by TI-ST.
 		 */
-		skb = skb_dequeue(&hst->rx_list);
-		if (skb != NULL) {
-			*(unsigned int *)arg = skb->len + 1;
-			/* Re-Store the SKB for furtur Read operations */
-			skb_queue_head(&hst->rx_list, skb);
-		} else {
-			*(unsigned int *)arg = 0;
+		{
+			unsigned int val = 0;
+			/* Peek without disturbing queue ordering */
+			skb = skb_peek(&hst->rx_list);
+			if (skb)
+				val = skb->len +1;
+			if (put_user(val, (unsigned int __user *)arg))
+				return -EFAULT;
+			pr_debug("returning %u\n", val);
 		}
-		pr_debug("returning %d\n", *(unsigned int *)arg);
 		break;
 	default:
 		pr_debug("Un-Identified IOCTL %d\n", cmd);
