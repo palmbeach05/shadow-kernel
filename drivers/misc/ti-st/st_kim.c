@@ -301,9 +301,18 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 		pr_err("kim: failed to read local ver");
 		return err;
 	}
-	err =
-	    request_firmware(&kim_gdata->fw_entry, bts_scr_name,
+
+	/* 1. Try the "modern" path first (ti-connectivity/...) */
+	err = request_firmware(&kim_gdata->fw_entry, bts_scr_name,
 			     &kim_gdata->kim_pdev->dev);
+
+	if (unlikely(err == -2)) { /* -2 is -ENOENT */
+		/* 2. Fallback: skip the first 16 characters ("ti-connectivity/") */
+		pr_info("firmware not found in ti-connectivity, trying legacy path");
+		err = request_firmware(&kim_gdata->fw_entry, &bts_scr_name[16],
+				     &kim_gdata->kim_pdev->dev);
+	}
+
 	if (unlikely((err != 0) || (kim_gdata->fw_entry->data == NULL) ||
 		     (kim_gdata->fw_entry->size == 0))) {
 		pr_err(" request_firmware failed(errno %ld) for %s", err,
