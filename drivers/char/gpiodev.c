@@ -35,7 +35,7 @@
 #include <asm/uaccess.h>
 #include <asm/irq.h>
 #include <mach/gpio.h>
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/gpiodev.h>
 #include <linux/platform_device.h>
 
