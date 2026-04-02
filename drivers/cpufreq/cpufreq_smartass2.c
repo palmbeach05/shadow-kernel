@@ -87,14 +87,14 @@ static unsigned long min_cpu_load;
  * The minimum amount of time to spend at a frequency before we can ramp up.
  * Notice we ignore this when we are below the ideal frequency.
  */
-#define DEFAULT_UP_RATE_US 30000;
+#define DEFAULT_UP_RATE_US 30000
 static unsigned long up_rate_us;
 
 /*
  * The minimum amount of time to spend at a frequency before we can ramp down.
  * Notice we ignore this when we are above the ideal frequency.
  */
-#define DEFAULT_DOWN_RATE_US 60000;
+#define DEFAULT_DOWN_RATE_US 60000
 static unsigned long down_rate_us;
 
 /*
@@ -171,19 +171,37 @@ struct cpufreq_governor cpufreq_gov_smartass2 = {
 	.owner = THIS_MODULE,
 };
 
-inline static void smartass_update_min_max(struct smartass_info_s *this_smartass, struct cpufreq_policy *policy, int suspend) {
-	if (suspend) {
-		this_smartass->ideal_speed = // sleep_ideal_freq; but make sure it obeys the policy min/max
-			policy->max > sleep_ideal_freq ?
-			(sleep_ideal_freq > policy->min ? sleep_ideal_freq : policy->min) : policy->max;
-	} else {
-		this_smartass->ideal_speed = // awake_ideal_freq; but make sure it obeys the policy min/max
-			policy->min < awake_ideal_freq ?
-			(awake_ideal_freq < policy->max ? awake_ideal_freq : policy->max) : policy->min;
-	}
+
+static inline void smartass_update_min_max(struct smartass_info_s *this_smartass,
+                       struct cpufreq_policy *policy,
+                       int suspend)
+{
+    if (suspend) {
+        /*
+         * sleep_ideal_freq, clamped to policy min/max:
+         * ideal = min(max(sleep_ideal_freq, policy->min), policy->max)
+         */
+        if (sleep_ideal_freq <= policy->min)
+            this_smartass->ideal_speed = policy->min;
+        else if (sleep_ideal_freq >= policy->max)
+            this_smartass->ideal_speed = policy->max;
+        else
+            this_smartass->ideal_speed = sleep_ideal_freq;
+    } else {
+        /*
+         * awake_ideal_freq, clamped to policy min/max:
+         * ideal = min(max(awake_ideal_freq, policy->min), policy->max)
+         */
+        if (awake_ideal_freq <= policy->min)
+            this_smartass->ideal_speed = policy->min;
+        else if (awake_ideal_freq >= policy->max)
+            this_smartass->ideal_speed = policy->max;
+        else
+            this_smartass->ideal_speed = awake_ideal_freq;
+    }
 }
 
-inline static void smartass_update_min_max_allcpus(void) {
+static inline void smartass_update_min_max_allcpus(void) {
 	unsigned int i;
 	for_each_online_cpu(i) {
 		struct smartass_info_s *this_smartass = &per_cpu(smartass_info, i);
@@ -192,7 +210,7 @@ inline static void smartass_update_min_max_allcpus(void) {
 	}
 }
 
-inline static unsigned int validate_freq(struct cpufreq_policy *policy, int freq) {
+static inline unsigned int validate_freq(struct cpufreq_policy *policy, int freq) {
 	if (freq > (int)policy->max)
 		return policy->max;
 	if (freq < (int)policy->min)
@@ -200,19 +218,19 @@ inline static unsigned int validate_freq(struct cpufreq_policy *policy, int freq
 	return freq;
 }
 
-inline static void reset_timer(unsigned long cpu, struct smartass_info_s *this_smartass) {
+static inline void reset_timer(unsigned long cpu, struct smartass_info_s *this_smartass) {
 	this_smartass->time_in_idle = get_cpu_idle_time_us(cpu, &this_smartass->idle_exit_time);
 	mod_timer(&this_smartass->timer, jiffies + sample_rate_jiffies);
 }
 
-inline static void work_cpumask_set(unsigned long cpu) {
+static inline void work_cpumask_set(unsigned long cpu) {
 	unsigned long flags;
 	spin_lock_irqsave(&cpumask_lock, flags);
 	cpumask_set_cpu(cpu, &work_cpumask);
 	spin_unlock_irqrestore(&cpumask_lock, flags);
 }
 
-inline static int work_cpumask_test_and_clear(unsigned long cpu) {
+static inline int work_cpumask_test_and_clear(unsigned long cpu) {
 	unsigned long flags;
 	int res = 0;
 	spin_lock_irqsave(&cpumask_lock, flags);
@@ -221,7 +239,7 @@ inline static int work_cpumask_test_and_clear(unsigned long cpu) {
 	return res;
 }
 
-inline static int target_freq(struct cpufreq_policy *policy, struct smartass_info_s *this_smartass,
+static inline int target_freq(struct cpufreq_policy *policy, struct smartass_info_s *this_smartass,
 			      int new_freq, int old_freq, int prefered_relation) {
 	int index, target;
 	struct cpufreq_frequency_table *table = this_smartass->freq_table;
@@ -291,7 +309,9 @@ static void cpufreq_smartass_timer(unsigned long cpu)
 	delta_idle = cputime64_sub(now_idle, this_smartass->time_in_idle);
 	delta_time = cputime64_sub(update_time, this_smartass->idle_exit_time);
 
-	// If timer ran less than 1ms after short-term sample started, retry.
+	/*
+	 * If timer ran less than 1ms after short-term sample started, retry.
+	 */
 	if (delta_time < 1000) {
 		if (!timer_pending(&this_smartass->timer))
 			reset_timer(cpu,this_smartass);
@@ -309,9 +329,11 @@ static void cpufreq_smartass_timer(unsigned long cpu)
 	this_smartass->cur_cpu_load = cpu_load;
 	this_smartass->old_freq = old_freq;
 
-	// Scale up if load is above max or if there where no idle cycles since coming out of idle,
-	// additionally, if we are at or above the ideal_speed, verify we have been at this frequency
-	// for at least up_rate_us:
+	/*
+	 * Scale up if load is above max or if there were no idle cycles since coming out of idle.
+	 * Additionally, if we are at or above the ideal_speed, verify we have been at this
+	 * frequency for at least up_rate_us.
+	 */
 	if (cpu_load > max_cpu_load || delta_idle == 0)
 	{
 		if (old_freq < policy->max &&
@@ -342,32 +364,37 @@ static void cpufreq_smartass_timer(unsigned long cpu)
 	}
 	else this_smartass->ramp_dir = 0;
 
-	// To avoid unnecessary load when the CPU is already at high load, we don't
-	// reset ourselves if we are at max speed. If and when there are idle cycles,
-	// the idle loop will activate the timer.
-	// Additionally, if we queued some work, the work task will reset the timer
-	// after it has done its adjustments.
+	/*
+	 * To avoid unnecessary load when the CPU is already at high load, we don't
+	 * reset ourselves if we are at max speed. If and when there are idle cycles,
+	 * the idle loop will activate the timer.
+	 *
+	 * Additionally, if we queued some work, the work task will reset the timer
+	 * after it has done its adjustments.
+	 */
+
 	if (!queued_work && old_freq < policy->max)
 		reset_timer(cpu,this_smartass);
 }
 
 static void cpufreq_idle(void)
 {
-	struct smartass_info_s *this_smartass = &per_cpu(smartass_info, smp_processor_id());
-	struct cpufreq_policy *policy = this_smartass->cur_policy;
+    struct smartass_info_s *this_smartass =
+        &per_cpu(smartass_info, smp_processor_id());
+    struct cpufreq_policy *policy = this_smartass->cur_policy;
 
-	if (!this_smartass->enable) {
-		pm_idle_old();
-		return;
-	}
+    if (!this_smartass->enable || !policy) {
+        pm_idle_old();
+        return;
+    }
 
-	if (policy->cur == policy->min && timer_pending(&this_smartass->timer))
-		del_timer(&this_smartass->timer);
+    if (policy->cur == policy->min && timer_pending(&this_smartass->timer))
+        del_timer(&this_smartass->timer);
 
-	pm_idle_old();
+    pm_idle_old();
 
-	if (!timer_pending(&this_smartass->timer))
-		reset_timer(smp_processor_id(), this_smartass);
+    if (!timer_pending(&this_smartass->timer))
+        reset_timer(smp_processor_id(), this_smartass);
 }
 
 /* We use the same work function to sale up and down */
@@ -460,14 +487,19 @@ static ssize_t show_debug_mask(struct kobject *kobj, struct attribute *attr, cha
 	return sprintf(buf, "%lu\n", debug_mask);
 }
 
-static ssize_t store_debug_mask(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_debug_mask(struct kobject *kobj,
+                struct attribute *attr,
+                const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0)
-		debug_mask = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    debug_mask = input;
+    return count;
 }
 
 static ssize_t show_up_rate_us(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -475,14 +507,22 @@ static ssize_t show_up_rate_us(struct kobject *kobj, struct attribute *attr, cha
 	return sprintf(buf, "%lu\n", up_rate_us);
 }
 
-static ssize_t store_up_rate_us(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_up_rate_us(struct kobject *kobj,
+                struct attribute *attr,
+                const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input >= 0 && input <= 100000000)
-		up_rate_us = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    if (input > 100000000)
+        return -EINVAL;
+
+    up_rate_us = input;
+    return count;
 }
 
 static ssize_t show_down_rate_us(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -490,14 +530,22 @@ static ssize_t show_down_rate_us(struct kobject *kobj, struct attribute *attr, c
 	return sprintf(buf, "%lu\n", down_rate_us);
 }
 
-static ssize_t store_down_rate_us(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_down_rate_us(struct kobject *kobj,
+                  struct attribute *attr,
+                  const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input >= 0 && input <= 100000000)
-		down_rate_us = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    if (input > 100000000)
+        return -EINVAL;
+
+    down_rate_us = input;
+    return count;
 }
 
 static ssize_t show_sleep_ideal_freq(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -505,17 +553,23 @@ static ssize_t show_sleep_ideal_freq(struct kobject *kobj, struct attribute *att
 	return sprintf(buf, "%u\n", sleep_ideal_freq);
 }
 
-static ssize_t store_sleep_ideal_freq(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_sleep_ideal_freq(struct kobject *kobj,
+                      struct attribute *attr,
+                      const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input >= 0) {
-		sleep_ideal_freq = input;
-		if (suspended)
-			smartass_update_min_max_allcpus();
-	}
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    sleep_ideal_freq = input;
+
+    if (suspended)
+        smartass_update_min_max_allcpus();
+
+    return count;
 }
 
 static ssize_t show_sleep_wakeup_freq(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -523,14 +577,19 @@ static ssize_t show_sleep_wakeup_freq(struct kobject *kobj, struct attribute *at
 	return sprintf(buf, "%u\n", sleep_wakeup_freq);
 }
 
-static ssize_t store_sleep_wakeup_freq(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_sleep_wakeup_freq(struct kobject *kobj,
+                       struct attribute *attr,
+                       const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input >= 0)
-		sleep_wakeup_freq = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    sleep_wakeup_freq = input;
+    return count;
 }
 
 static ssize_t show_awake_ideal_freq(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -538,17 +597,23 @@ static ssize_t show_awake_ideal_freq(struct kobject *kobj, struct attribute *att
 	return sprintf(buf, "%u\n", awake_ideal_freq);
 }
 
-static ssize_t store_awake_ideal_freq(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_awake_ideal_freq(struct kobject *kobj,
+                      struct attribute *attr,
+                      const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input >= 0) {
-		awake_ideal_freq = input;
-		if (!suspended)
-			smartass_update_min_max_allcpus();
-	}
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    awake_ideal_freq = input;
+
+    if (!suspended)
+        smartass_update_min_max_allcpus();
+
+    return count;
 }
 
 static ssize_t show_sample_rate_jiffies(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -556,14 +621,22 @@ static ssize_t show_sample_rate_jiffies(struct kobject *kobj, struct attribute *
 	return sprintf(buf, "%u\n", sample_rate_jiffies);
 }
 
-static ssize_t store_sample_rate_jiffies(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_sample_rate_jiffies(struct kobject *kobj,
+                     struct attribute *attr,
+                     const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input > 0 && input <= 1000)
-		sample_rate_jiffies = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    if (input == 0 || input > 1000)
+        return -EINVAL;
+
+    sample_rate_jiffies = input;
+    return count;
 }
 
 static ssize_t show_ramp_up_step(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -571,14 +644,19 @@ static ssize_t show_ramp_up_step(struct kobject *kobj, struct attribute *attr, c
 	return sprintf(buf, "%u\n", ramp_up_step);
 }
 
-static ssize_t store_ramp_up_step(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_ramp_up_step(struct kobject *kobj,
+                  struct attribute *attr,
+                  const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input >= 0)
-		ramp_up_step = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    ramp_up_step = input;
+    return count;
 }
 
 static ssize_t show_ramp_down_step(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -586,14 +664,19 @@ static ssize_t show_ramp_down_step(struct kobject *kobj, struct attribute *attr,
 	return sprintf(buf, "%u\n", ramp_down_step);
 }
 
-static ssize_t store_ramp_down_step(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_ramp_down_step(struct kobject *kobj,
+                    struct attribute *attr,
+                    const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input >= 0)
-		ramp_down_step = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    ramp_down_step = input;
+    return count;
 }
 
 static ssize_t show_max_cpu_load(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -601,14 +684,22 @@ static ssize_t show_max_cpu_load(struct kobject *kobj, struct attribute *attr, c
 	return sprintf(buf, "%lu\n", max_cpu_load);
 }
 
-static ssize_t store_max_cpu_load(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_max_cpu_load(struct kobject *kobj,
+                  struct attribute *attr,
+                  const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input > 0 && input <= 100)
-		max_cpu_load = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    if (input == 0 || input > 100)
+        return -EINVAL;
+
+    max_cpu_load = input;
+    return count;
 }
 
 static ssize_t show_min_cpu_load(struct kobject *kobj, struct attribute *attr, char *buf)
@@ -616,14 +707,22 @@ static ssize_t show_min_cpu_load(struct kobject *kobj, struct attribute *attr, c
 	return sprintf(buf, "%lu\n", min_cpu_load);
 }
 
-static ssize_t store_min_cpu_load(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+static ssize_t store_min_cpu_load(struct kobject *kobj,
+                  struct attribute *attr,
+                  const char *buf, size_t count)
 {
-	ssize_t res;
-	unsigned long input;
-	res = strict_strtoul(buf, 0, &input);
-	if (res >= 0 && input > 0 && input < 100)
-		min_cpu_load = input;
-	return count;
+    unsigned long input;
+    int ret;
+
+    ret = strict_strtoul(buf, 0, &input);
+    if (ret)
+        return ret;
+
+    if (input == 0 || input >= 100)
+        return -EINVAL;
+
+    min_cpu_load = input;
+    return count;
 }
 
 #define define_global_rw_attr(_name)		\
@@ -728,6 +827,7 @@ static int cpufreq_governor_smartass(struct cpufreq_policy *new_policy,
 		del_timer(&this_smartass->timer);
 		flush_work(&freq_scale_work);
 		this_smartass->idle_exit_time = 0;
+		this_smartass->cur_policy = NULL;
 
 		if (atomic_dec_return(&active_count) <= 1) {
 			sysfs_remove_group(cpufreq_global_kobject,
@@ -835,11 +935,20 @@ static int __init cpufreq_smartass_init(void)
 		work_cpumask_test_and_clear(i);
 	}
 
-	// Scale up is high priority
+
+	/* Scale up is high priority */
 	up_wq = create_rt_workqueue("ksmartass_up");
 	down_wq = create_workqueue("ksmartass_down");
-	if (!up_wq || !down_wq)
+
+	if (!up_wq || !down_wq) {
+		if (up_wq)
+			destroy_workqueue(up_wq);
+		if (down_wq)
+			destroy_workqueue(down_wq);
 		return -ENOMEM;
+}
+
+
 
 	INIT_WORK(&freq_scale_work, cpufreq_smartass_freq_change_time_work);
 
@@ -856,9 +965,12 @@ module_init(cpufreq_smartass_init);
 
 static void __exit cpufreq_smartass_exit(void)
 {
-	cpufreq_unregister_governor(&cpufreq_gov_smartass2);
-	destroy_workqueue(up_wq);
-	destroy_workqueue(down_wq);
+    unregister_early_suspend(&smartass_power_suspend);
+
+    cpufreq_unregister_governor(&cpufreq_gov_smartass2);
+
+    destroy_workqueue(up_wq);
+    destroy_workqueue(down_wq);
 }
 
 module_exit(cpufreq_smartass_exit);
