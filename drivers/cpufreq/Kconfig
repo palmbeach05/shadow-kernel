@@ -167,6 +167,10 @@ config CPU_FREQ_GOV_SMARTASS
 	tristate "'smartass' cpufreq policy governor"
 	select CPU_FREQ_TABLE
 
+config CPU_FREQ_GOV_SMARTASS2
+	tristate "'smartass2' cpufreq policy governor"
+	select CPU_FREQ_TABLE
+
 config CPU_FREQ_GOV_ONDEMAND
 	tristate "'ondemand' cpufreq policy governor"
 	select CPU_FREQ_TABLE
