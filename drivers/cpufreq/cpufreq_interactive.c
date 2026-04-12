@@ -30,6 +30,8 @@
 #include <linux/kthread.h>
 #include <linux/slab.h>
 
+#include "cpufreq_governor.h"
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/cpufreq_interactive.h>
 
