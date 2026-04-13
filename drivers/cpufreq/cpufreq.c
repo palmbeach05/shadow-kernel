@@ -31,6 +31,14 @@
 #include <linux/completion.h>
 #include <linux/mutex.h>
 
+static inline int cpufreq_disabled(void)
+{
+	/* * 2.6.32 backport: Returning 0 because legacy Motorola kernels 
+	 * generally do not implement the 'cpufreq=off' boot parameter.
+	 */
+	return 0;
+}
+
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
  * level driver of CPUFreq support, and its spinlock. This lock
@@ -845,6 +853,7 @@ static int cpufreq_add_policy_cpu(unsigned int cpu, unsigned int sibling,
  */
 static int cpufreq_add_dev(struct sys_device *sys_dev)
 {
+	struct sys_device *dev = sys_dev;
 	unsigned int j, cpu = dev->id;
 	int ret = -ENOMEM, found = 0;
 	struct cpufreq_policy *policy;
