@@ -89,9 +89,9 @@ static long st_receive(void *priv_data, struct sk_buff *skb)
  * status.ti_st_open() function will wait for signal from this
  * API when st_register() function returns ST_PENDING.
  */
-static void st_reg_completion_cb(void *priv_data, char data)
+static void st_reg_completion_cb(void *priv, int data)
 {
-	struct ti_st	*lhst = (void *) priv_data;
+	struct ti_st *lhst = (struct ti_st *) priv;
 
 	pr_info("@ %s\n", __func__);
 	/* 

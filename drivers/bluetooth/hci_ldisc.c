@@ -516,7 +516,6 @@ static struct tty_ldisc_ops hci_uart_ldisc = {
 	.read		= hci_uart_tty_read,
 	.write		= hci_uart_tty_write,
 	.ioctl		= hci_uart_tty_ioctl,
-	.compat_ioctl	= hci_uart_tty_ioctl,
 	.poll		= hci_uart_tty_poll,
 	.receive_buf	= hci_uart_tty_receive,
 	.write_wakeup	= hci_uart_tty_wakeup,

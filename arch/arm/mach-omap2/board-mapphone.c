@@ -1858,26 +1858,47 @@ static int __init omap_hdq_init(void)
 * Upon every suspend, make sure the wilink chip is capable enough to wake-up the
 * OMAP host.
 */
-static int mapphone_st_set_power(struct device *dev, int on)
+static int mapphone_st_power_control(int on)
 {
 	static bool gpio_requested = false;
 	int err;
 
-	/* * Since the driver removed gpio_request in commit eccf297, 
-	 * the board file must claim the pin before toggling values.
-	 */
 	if (!gpio_requested) {
 		err = gpio_request(MAPPHONE_BT_RESET_GPIO, "bt_nshutdown");
 		if (err && err != -EBUSY) {
 			pr_err("ST_KIM: Failed to request GPIO %d, error %d\n", 
 				MAPPHONE_BT_RESET_GPIO, err);
 			return err;
-		}
+	}
 		gpio_direction_output(MAPPHONE_BT_RESET_GPIO, 0);
 		gpio_requested = true;
 	}
 
+	if (on) {
+		/* Power Up Sequence */
+		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 0);
+		mdelay(5);
+		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 1);
+		mdelay(100);
+	} else {
+		/* Power Down Sequence */
+		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 0);
+		mdelay(1);
+		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 1);
+		mdelay(1);
+		gpio_set_value(MAPPHONE_BT_RESET_GPIO, 0);
+	}
 	return 0;
+}
+
+static int mapphone_st_enable(struct kim_data_s *kim)
+{
+    return mapphone_st_power_control(1);
+}
+
+static int mapphone_st_disable(struct kim_data_s *kim)
+{
+    return mapphone_st_power_control(0);
 }
 static int plat_kim_suspend(struct platform_device *pdev, pm_message_t state)
 {
@@ -1896,8 +1917,8 @@ struct ti_st_plat_data wilink_pdata = {
 	.baud_rate = 3686400,
 	.suspend = plat_kim_suspend,
 	.resume = plat_kim_resume,
-	.chip_enable = mapphone_st_set_power,
-	.chip_disable = mapphone_st_set_power,
+	.chip_enable = mapphone_st_enable,
+	.chip_disable = mapphone_st_disable,
 };
 static struct platform_device wl127x_device = {
 	.name           = "kim",
