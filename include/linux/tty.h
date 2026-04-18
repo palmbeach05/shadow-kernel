@@ -10,6 +10,7 @@
 #include <linux/major.h>
 #include <linux/termios.h>
 #include <linux/workqueue.h>
+#include <linux/tty_buffer.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_ldisc.h>
 #include <linux/mutex.h>
@@ -56,37 +57,6 @@
  * isn't in use (eg VINTR has no character etc)
  */
 #define __DISABLED_CHAR '\0'
-
-struct tty_buffer {
-	struct tty_buffer *next;
-	char *char_buf_ptr;
-	unsigned char *flag_buf_ptr;
-	int used;
-	int size;
-	int commit;
-	int read;
-	/* Data points here */
-	unsigned long data[0];
-};
-
-struct tty_bufhead {
-	struct delayed_work work;
-	spinlock_t lock;
-	struct tty_buffer *head;	/* Queue head */
-	struct tty_buffer *tail;	/* Active buffer */
-	struct tty_buffer *free;	/* Free queue head */
-	int memory_used;		/* Buffer space used excluding
-								free queue */
-};
-/*
- * When a break, frame error, or parity error happens, these codes are
- * stuffed into the flags buffer.
- */
-#define TTY_NORMAL	0
-#define TTY_BREAK	1
-#define TTY_FRAME	2
-#define TTY_PARITY	3
-#define TTY_OVERRUN	4
 
 #define INTR_CHAR(tty) ((tty)->termios->c_cc[VINTR])
 #define QUIT_CHAR(tty) ((tty)->termios->c_cc[VQUIT])
