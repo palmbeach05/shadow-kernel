@@ -365,7 +365,7 @@ int __psread_lock_slow(psrwlock_t *rwlock,
 	unsigned long v;
 	unsigned int uc;
 	int ret;
-	int subclass = SINGLE_DEPTH_NESTING;	/* TODO : parameter */
+	int __maybe_unused subclass = SINGLE_DEPTH_NESTING;	/* TODO : parameter */
 
 	if (unlikely(in_irq() || irqs_disabled()))
 		WARN_ON_ONCE(!(rctx & PSR_IRQ) || ptype != PSRW_NON_PREEMPT);
@@ -680,13 +680,13 @@ static void writer_count_dec(unsigned int *uc, psrwlock_t *rwlock,
 static int __pswrite_lock_slow_common(unsigned int uc, psrwlock_t *rwlock,
 		int trylock, long state, unsigned long ip)
 {
-	struct task_struct *task = current;
+	struct task_struct __maybe_unused *task = current;
 	enum psrw_prio wctx = rwlock->wctx;
 	u32 rctx = rwlock->rctx_bitmap;
 	enum preempt_type ptype;
 	unsigned int ws;
 	int ret;
-	int subclass = SINGLE_DEPTH_NESTING;	/* TODO : parameter */
+	int __maybe_unused subclass = SINGLE_DEPTH_NESTING;	/* TODO : parameter */
 
 	write_context_enable(wctx, rctx);
 
@@ -857,7 +857,7 @@ void _pswrite_unlock_slow(unsigned int uc, psrwlock_t *rwlock)
 	enum psrw_prio wctx = rwlock->wctx;
 	u32 rctx = rwlock->rctx_bitmap;
 	enum preempt_type ptype;
-	int nested = 1;	/* FIXME : allow nested = 0 ? */
+	int __maybe_unused nested = 1;	/* FIXME : allow nested = 0 ? */
 
 	mutex_release(&rwlock->dep_map, nested, _RET_IP_);
 	debug_psrwlock_unlock(rwlock, 0);
