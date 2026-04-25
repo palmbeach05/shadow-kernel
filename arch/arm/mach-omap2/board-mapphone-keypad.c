@@ -23,7 +23,6 @@
 #include <plat/mux.h>
 #include <plat/gpio.h>
 #include <linux/gpio_mapping.h>
-#include <plat/keypad.h>
 #include <plat/board-mapphone.h>
 
 #ifdef CONFIG_ARM_OF

@@ -35,7 +35,6 @@
 
 #include <plat/dmtimer.h>
 #include <plat/gpio.h>
-#include <plat/keypad.h>
 #include <plat/mux.h>
 
 #ifdef CONFIG_ARM_OF
