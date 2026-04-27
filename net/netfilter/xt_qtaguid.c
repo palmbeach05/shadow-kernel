@@ -32,6 +32,10 @@
 #include <net/tcp.h>
 #include <net/udp.h>
 
+#if defined(CONFIG_IP6_NF_IPTABLES) || defined(CONFIG_IP6_NF_IPTABLES_MODULE)
+#include <linux/netfilter_ipv6/ip6_tables.h>
+#endif
+
 #include <linux/netfilter/xt_socket.h>
 #include "xt_qtaguid_internal.h"
 #include "xt_qtaguid_print.h"
@@ -1221,12 +1225,10 @@ static int ipx_proto(const struct sk_buff *skb,
 
 	switch (par->family) {
 	case NFPROTO_IPV6:
-		printk(KERN_ERR "IPV6 not supported in xt_qtaguid\n"); 
-		// FIXME
-		// tproto = ipv6_find_hdr(skb, &thoff, -1, NULL);
-		// if (tproto < 0)
-		// 	MT_DEBUG("%s(): transport header not found in ipv6"
-		// 		 " skb=%p\n", __func__, skb);
+		tproto = ipv6_find_hdr(skb, &thoff, -1, NULL);
+		if (tproto < 0)
+		 	MT_DEBUG("%s(): transport header not found in ipv6"
+		 		 " skb=%p\n", __func__, skb);
 		break;
 	case NFPROTO_IPV4:
 		tproto = ip_hdr(skb)->protocol;
