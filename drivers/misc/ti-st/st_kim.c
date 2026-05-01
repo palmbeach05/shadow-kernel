@@ -319,23 +319,51 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 		return err;
 	}
 
-	/* 1. Try the "modern" path first (ti-connectivity/...) */
+	/* 
+	 * STEP 1: Determine the "Base Path" 
+	 * We check if the 'ti-connectivity/' directory exists by looking for the 
+	 * hardware-default file there first.
+	 */
 	err = request_firmware(&kim_gdata->fw_entry, bts_scr_name,
-			     &kim_gdata->kim_pdev->dev);
+		&kim_gdata->kim_pdev->dev);
 
-	if (unlikely(err == -2)) { /* -2 is -ENOENT */
-		/* 2. Fallback: skip the first 16 characters ("ti-connectivity/") */
-		pr_info("firmware not found in ti-connectivity, trying legacy path");
-		err = request_firmware(&kim_gdata->fw_entry, &bts_scr_name[16],
-				     &kim_gdata->kim_pdev->dev);
+	if (err == 0) {
+		/* MODERN PATH DETECTED */
+		pr_info("kim: modern path detected, checking for preferred 7.6.15 override");
+		release_firmware(kim_gdata->fw_entry);
+
+		/* Try to override with 7.6.15 in the modern path */
+		err = request_firmware(&kim_gdata->fw_entry, "ti-connectivity/TIInit_7.6.15.bts",
+			&kim_gdata->kim_pdev->dev);
+
+		if (err != 0) {
+			pr_info("kim: 7.6.15 override not found, falling back to hardware default 7.2.31");
+			err = request_firmware(&kim_gdata->fw_entry, bts_scr_name,
+				&kim_gdata->kim_pdev->dev);
+		}
+	} 
+	else if (err == -2) {
+		/* LEGACY PATH DETECTED (Modern path returned ENOENT) */
+		pr_info("kim: modern path not found, probing legacy root path");
+	
+		/* Try to override with 7.6.15 in the legacy path (root) */
+		err = request_firmware(&kim_gdata->fw_entry, "TIInit_7.6.15.bts",
+			&kim_gdata->kim_pdev->dev);
+
+		if (err != 0) {
+			pr_info("kim: 7.6.15 legacy not found, trying hardware default legacy");
+			/* bts_scr_name[16] skips "ti-connectivity/" */
+			err = request_firmware(&kim_gdata->fw_entry, &bts_scr_name[16],
+				&kim_gdata->kim_pdev->dev);
+		}
 	}
 
-	if (unlikely((err != 0) || (kim_gdata->fw_entry->data == NULL) ||
-		     (kim_gdata->fw_entry->size == 0))) {
-		pr_err(" request_firmware failed(errno %ld) for %s", err,
-			   bts_scr_name);
+	/* FINAL VALIDATION */
+	if (unlikely((err != 0) || (kim_gdata->fw_entry == NULL))) {
+		pr_err("kim: firmware load failed (errno %ld)", err);
 		return -EINVAL;
 	}
+
 	ptr = (void *)kim_gdata->fw_entry->data;
 	len = kim_gdata->fw_entry->size;
 	/*
