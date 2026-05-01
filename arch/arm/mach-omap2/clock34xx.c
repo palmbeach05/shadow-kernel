@@ -1260,6 +1260,7 @@ void omap2_clk_init_cpufreq_table(struct cpufreq_frequency_table **table)
 	overclock_init();
 #endif
 }
+EXPORT_SYMBOL(omap2_clk_init_cpufreq_table);
 #endif
 
 static struct clk_functions omap2_clk_functions = {
