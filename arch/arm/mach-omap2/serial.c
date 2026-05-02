@@ -79,6 +79,7 @@ static struct omap_uart_state omap_uart[OMAP_MAX_NR_PORTS];
 static LIST_HEAD(uart_list);
 static unsigned int fifo_idleblks = 0;
 static int uart0_padconf = 0x180;
+static int omap_uart_con_id = -1;
 
 #ifdef CONFIG_SERIAL_OMAP
 static struct plat_serialomap_port serial_platform_data[] = {
@@ -700,6 +701,23 @@ static int fifo_idleblk_set(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(fifo_idleblk_fops, fifo_idleblk_get, fifo_idleblk_set, "%llu\n");
 void __init omap_serial_early_init(void)
 {
+	int i;
+	char name[16];
+	extern char *saved_command_line;
+
+	/* * Scan the bootargs (saved_command_line) for "ttyS0", "ttyS1", etc.
+	 * This pre-identifies the console so the driver doesn't have to guess.
+	 */
+	for (i = 0; i < OMAP_MAX_NR_PORTS; i++) {
+		snprintf(name, sizeof(name), "ttyS%d", i);
+		if (strstr(saved_command_line, name)) {
+			omap_uart_con_id = i;
+			/* We keep this printk because it only happens once per boot */
+			printk(KERN_INFO "OMAP Serial: Console identified at UART%d\n", i + 1);
+			break;
+		}
+	}
+	return 0;
 }
 
 void __init omap_serial_ctsrts_init(unsigned char ctsrts[])
@@ -768,6 +786,15 @@ void __init omap_serial_init(int wake_gpio_strobe,
 		uart->num = i;
 		p->private_data = uart;
 		uart->p = p;
+
+		/* Set the is_console flag if this matches our early
+		 * identification.
+		 */
+		if (i == omap_uart_con_id)
+			p->is_console = 1;
+		else
+			p->is_console = 0;
+
 		list_add(&uart->node, &uart_list);
 
 		omap_uart_enable_clocks(uart);

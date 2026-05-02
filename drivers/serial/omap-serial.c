@@ -122,6 +122,7 @@ struct uart_omap_port {
 	int			use_dma;
 	int			is_buf_dma_alloced;
 	int			restore_autorts;
+	int 			use_console;
 	/*
 	 * Some bits in registers are cleared on a read, so they must
 	 * be saved whenever the register is read but the bits will not
@@ -131,7 +132,6 @@ struct uart_omap_port {
 #define MSR_SAVE_FLAGS UART_MSR_ANY_DELTA
 	unsigned char		msr_saved_flags;
 	char			name[12];
-	int			use_console;
 	spinlock_t		uart_lock;
 	char			dev_name[50];
 #ifdef CONFIG_SERIAL_OMAP3430_HW_FLOW_CONTROL
@@ -1506,6 +1506,7 @@ static void uart_tx_dma_callback(int lch, u16 ch_status, void *data)
 static int serial_omap_probe(struct platform_device *pdev)
 {
 	struct plat_serialomap_port *pdata = pdev->dev.platform_data;
+	struct plat_serialomap_port *omap_up_info = pdata;
 	struct uart_omap_port	*up;
 	struct resource		*mem, *irq;
 	int ret = -ENOSPC;
@@ -1604,24 +1605,16 @@ static int serial_omap_probe(struct platform_device *pdev)
 		up->uart_dma.tx_dma_channel = 0xFF;
 		up->uart_dma.rx_dma_channel = 0xFF;
 	}
-	if (console_detect(str))
-		printk("Invalid console paramter. UART Library Init Failed!\n");
-	up->use_console = 0;
+
+	/* Use the is_console flag passed from serial.c platform data */
+	up->use_console = omap_up_info->is_console;
+
 	fcr[pdev->id - 1] = 0;
-	if (!strcmp(str, "ttyS0"))
-		up->use_console = 1;
-	else if (!strcmp(str, "ttyS1"))
-		up->use_console = 1;
-	else if (!strcmp(str, "ttyS2"))
-		up->use_console = 1;
-	else if (!strcmp(str, "ttyS3"))
-		up->use_console = 1;
-	else
-		printk(KERN_INFO
-		       "!!!!!!!! Unable to recongnize Console UART........\n");
 	ui[pdev->id - 1] = up;
+
 	serial_omap_add_console_port(up);
 	serial_omap_clear_fifos(up);
+
 #ifndef CONFIG_DEBUG_LL
 	ret = uart_add_one_port(&serial_omap_reg, &up->port);
 #else
