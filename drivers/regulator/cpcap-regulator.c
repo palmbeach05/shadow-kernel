@@ -552,10 +552,10 @@ static int __devexit cpcap_regulator_remove(struct platform_device *pdev)
 }
 
 static struct platform_driver cpcap_regulator_driver = {
+	.probe = cpcap_regulator_probe,
 	.driver = {
 		.name = "cpcap-regltr",
 	},
-	.probe = cpcap_regulator_probe,
 	.remove = __devexit_p(cpcap_regulator_remove),
 };
 
