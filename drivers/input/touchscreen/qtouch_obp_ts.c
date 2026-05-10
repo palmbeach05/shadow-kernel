@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2009 Google, Inc.
  * Copyright (C) 2009-2010 Motorola, Inc.
+ * Copyright (C) 2011 Motorola Mobility, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -913,8 +914,18 @@ static int do_touch_multi_msg(struct qtouch_ts_data *ts, struct qtm_object *obj,
 			__func__, msg->xpos_msb, msg->ypos_msb, msg->xypos_lsb);
 
 	/* x/y are 10bit values, with bottom 2 bits inside the xypos_lsb */
-	x = (msg->xpos_msb << 2) | ((msg->xypos_lsb >> 6) & 0x3);
-	y = (msg->ypos_msb << 2) | ((msg->xypos_lsb >> 2) & 0x3);
+//	x = (msg->xpos_msb << 2) | ((msg->xypos_lsb >> 6) & 0x3);
+//	y = (msg->ypos_msb << 2) | ((msg->xypos_lsb >> 2) & 0x3);
+
+	/* Compute x and y as 12 bit values with bottom 4 bits in xypos_lsb */
+	x = (msg->xpos_msb << 4) | ((msg->xypos_lsb & 0xF0) >> 4);
+	y = (msg->ypos_msb << 4) | (msg->xypos_lsb & 0x0F);
+
+	if (ts->pdata->multi_touch_cfg.x_res < 1024)
+		x = x >> 2; /* Decimate to 10 bits */
+
+	if (ts->pdata->multi_touch_cfg.y_res < 1024)
+		y = y >> 2; /* Decimate to 10 bits */
 
 	width = msg->touch_area;
 	pressure = msg->touch_amp;
@@ -1443,6 +1454,11 @@ static void qtouch_ts_work_func(struct work_struct *work)
 	struct irq_desc *desc;
 	int ret;
 
+#ifdef CONFIG_TOUCHSCREEN_DEBUG
+	counter_workqueue++;
+	show_uptime(last_wq_time);
+#endif
+
 	msg = qtouch_read_msg(ts);
 	if (msg == NULL) {
 		pr_err("%s: Cannot read message\n", __func__);
@@ -1629,8 +1645,15 @@ static int qtouch_ts_probe(struct i2c_client *client,
 
 	ts = kzalloc(sizeof(struct qtouch_ts_data), GFP_KERNEL);
 	if (ts == NULL) {
+		pr_err("%s: No memory for qtouch_ts_data\n", __func__);
 		err = -ENOMEM;
 		goto err_alloc_data_failed;
+	}
+	qtouch_ts_wq = create_singlethread_workqueue("qtouch_obp_ts_wq");
+	if (qtouch_ts_wq == NULL) {
+		pr_err("%s: No memory for qtouch_ts_wq\n", __func__);
+		err = -ENOMEM;
+		goto err_alloc_wq_failed;
 	}
 	ts->pdata = pdata;
 	ts->client = client;
@@ -1883,6 +1906,12 @@ err_reading_info_block:
 	if (ts->pdata->flags & QTOUCH_USE_KEYARRAY)
 		del_timer(&keyarray_timer);
 
+	if (qtouch_ts_wq) {
+		destroy_workqueue(qtouch_ts_wq);
+		qtouch_ts_wq = NULL;
+	}
+
+err_alloc_wq_failed:
 	kfree(ts);
 	ts = NULL;
 
@@ -1905,6 +1934,10 @@ static int qtouch_ts_remove(struct i2c_client *client)
 	free_irq(ts->client->irq, ts);
 	qtouch_ts_unregister_input(ts);
 	i2c_set_clientdata(client, NULL);
+	if (qtouch_ts_wq) {
+		destroy_workqueue(qtouch_ts_wq);
+		qtouch_ts_wq = NULL;
+	}
 	kfree(ts);
 	return 0;
 }
@@ -1913,6 +1946,23 @@ static int qtouch_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 {
 	struct qtouch_ts_data *ts = i2c_get_clientdata(client);
 	int ret;
+#ifdef CONFIG_TOUCHSCREEN_DEBUG
+	int i = 0;
+	printk(KERN_INFO "%s: interrupt_counter = %d, workqueue_counter = %d,\
+		last_wq_time = %s,status = %d,mode = %d,\
+		irq_enable = %d\n", __func__, counter_irq,\
+		counter_workqueue, last_wq_time, ts->status,\
+		ts->mode, atomic_read(&(ts->irq_enabled)));
+	for (i = 0; i < _NUM_FINGERS; i++) {
+		printk("%s: x = %d, y = %d,p = %d, w = %d, d = %d\n",\
+			__func__,\
+			copy_finger_data[i].x_data,\
+			copy_finger_data[i].y_data,\
+			copy_finger_data[i].z_data,\
+			copy_finger_data[i].w_data,\
+			copy_finger_data[i].down);
+	}
+#endif
 	if (qtouch_tsdebug & 4)
 		pr_info("%s: Suspending\n", __func__);
 
@@ -2299,8 +2349,6 @@ static int __devinit qtouch_ts_init(void)
 
 	/* reset will provoke qtouch_set_addr call, so we can get the ts struct address immediately */
 	mapphone_touch_reset();
-
-	printk(KERN_INFO MULTITOUCH_TAG": wrong parameter for wanted_touch\n");
 	
 	qtouch_ts_wq = create_singlethread_workqueue("qtouch_obp_ts_wq");
 	if (qtouch_ts_wq == NULL) {
