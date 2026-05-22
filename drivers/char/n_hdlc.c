@@ -190,7 +190,7 @@ static unsigned int n_hdlc_tty_poll(struct tty_struct *tty, struct file *filp,
 static int n_hdlc_tty_open(struct tty_struct *tty);
 static void n_hdlc_tty_close(struct tty_struct *tty);
 static void n_hdlc_tty_receive(struct tty_struct *tty, const __u8 *cp,
-			       char *fp, int count);
+			       const char *fp, size_t count);
 static void n_hdlc_tty_wakeup(struct tty_struct *tty);
 
 #define bset(p,b)	((p)[(b) >> 5] |= (1 << ((b) & 0x1f)))
@@ -225,7 +225,7 @@ static void flush_tx_queue(struct tty_struct *tty)
 
 static struct tty_ldisc_ops n_hdlc_ldisc = {
 	.owner		= THIS_MODULE,
-	.magic		= TTY_LDISC_MAGIC,
+	.num		 = N_HDLC,
 	.name		= "hdlc",
 	.open		= n_hdlc_tty_open,
 	.close		= n_hdlc_tty_close,
@@ -511,7 +511,7 @@ static void n_hdlc_tty_wakeup(struct tty_struct *tty)
  * interpreted as one HDLC frame.
  */
 static void n_hdlc_tty_receive(struct tty_struct *tty, const __u8 *data,
-			       char *flags, int count)
+			       const char *flags, int count)
 {
 	register struct n_hdlc *n_hdlc = tty2n_hdlc (tty);
 	register struct n_hdlc_buf *buf;
@@ -988,13 +988,7 @@ static char hdlc_unregister_fail[] __exitdata =
 
 static void __exit n_hdlc_exit(void)
 {
-	/* Release tty registration of line discipline */
-	int status = tty_unregister_ldisc(N_HDLC);
-
-	if (status)
-		printk(hdlc_unregister_fail, status);
-	else
-		printk(hdlc_unregister_ok);
+	tty_unregister_ldisc(&n_hdlc_ldisc);
 }
 
 module_init(n_hdlc_init);

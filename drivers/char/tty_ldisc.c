@@ -100,13 +100,12 @@ int tty_register_ldisc(struct tty_ldisc_ops *new_ldisc)
 {
 	unsigned long flags;
 	int ret = 0;
-	int disc = new_ldisc->num;
 
-	if (disc < N_TTY || disc >= NR_LDISCS)
+	if (new_ldisc->num < N_TTY || new_ldisc->num >= NR_LDISCS)
 		return -EINVAL;
 
 	spin_lock_irqsave(&tty_ldisc_lock, flags);
-	tty_ldiscs[disc] = new_ldisc;
+	tty_ldiscs[new_ldisc->num] = new_ldisc;
 	new_ldisc->refcount = 0;
 	spin_unlock_irqrestore(&tty_ldisc_lock, flags);
 

@@ -48,6 +48,7 @@
 #include <linux/audit.h>
 #include <linux/file.h>
 #include <linux/uaccess.h>
+#include <linux/module.h>
 
 #include <asm/system.h>
 
@@ -1349,7 +1350,7 @@ static void n_tty_write_wakeup(struct tty_struct *tty)
  */
 
 static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
-			      char *fp, int count)
+			      const char *fp, size_t count)
 {
 	const unsigned char *p;
 	char *f, flags = TTY_NORMAL;
@@ -2013,7 +2014,7 @@ break_out:
  */
 
 static unsigned int n_tty_poll(struct tty_struct *tty, struct file *file,
-							poll_table *wait)
+							struct poll_table *wait)
 {
 	unsigned int mask = 0;
 
@@ -2079,6 +2080,8 @@ static int n_tty_ioctl(struct tty_struct *tty, struct file *file,
 }
 
 struct tty_ldisc_ops tty_ldisc_N_TTY = {
+	.owner		 = THIS_MODULE,
+	.num		 = N_TTY,
 	.name            = "n_tty",
 	.open            = n_tty_open,
 	.close           = n_tty_close,
