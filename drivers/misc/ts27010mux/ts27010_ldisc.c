@@ -167,7 +167,7 @@ static void ts27010_ldisc_receive(struct tty_struct *tty,
 	WARN_ON(count == 0);
 
 	spin_lock_irqsave(&ts->recv_lock, flags);
-	n = ts27010_ringbuf_write(ts->rbuf, data, count);
+	n = ts27010_ringbuf_write(ts->rbuf, (const unsigned char *)data, count);
 	spin_unlock_irqrestore(&ts->recv_lock, flags);
 
 	if (n < count)
@@ -211,7 +211,5 @@ int ts27010_ldisc_init(void)
 
 void ts27010_ldisc_remove(void)
 {
-	tty_unregister_ldisc(N_TS2710);
+	tty_unregister_ldisc(&ts27010_ldisc);
 }
-
-

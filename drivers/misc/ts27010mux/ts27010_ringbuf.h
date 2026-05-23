@@ -85,5 +85,3 @@ static inline int ts27010_ringbuf_write(struct ts27010_ringbuf *rbuf,
 
 	return count;
 }
-
-
