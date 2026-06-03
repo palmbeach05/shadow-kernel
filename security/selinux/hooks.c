@@ -88,6 +88,11 @@
 
 #define NUM_SEL_MNT_OPTS 5
 
+/* Compatibility fallback for missing 2011 dcache_path_raw function */
+#ifndef dentry_path_raw
+#define dentry_path_raw(dentry, buf, buflen) d_path(&(struct path){.dentry = dentry, .mnt = NULL}, buf, buflen)
+#endif
+
 extern int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm);
 extern struct security_operations *security_ops;
 
