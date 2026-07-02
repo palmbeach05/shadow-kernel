@@ -1046,9 +1046,11 @@ static int __cpufreq_remove_dev(struct sys_device *sys_dev)
 		if (ret) {
 			pr_err("%s: Failed to move kobj: %d", __func__, ret);
 			cpumask_set_cpu(cpu, data->cpus);
+
+			write_lock_irqsave(&cpufreq_driver_lock, flags);
 			ret = sysfs_create_link(&cpu_sys_dev->kobj, &data->kobj,
 					"cpufreq");
-			spin_unlock_irqrestore(&cpufreq_driver_lock, flags);
+			write_unlock_irqrestore(&cpufreq_driver_lock, flags);
 			unlock_policy_rwsem_write(cpu);
 			return -EINVAL;
 		}
@@ -1058,8 +1060,6 @@ static int __cpufreq_remove_dev(struct sys_device *sys_dev)
 				__func__, cpu_sys_dev->id, cpu);
 	}
 
-<<<<<<< HEAD
-	spin_unlock_irqrestore(&cpufreq_driver_lock, flags);
 	pr_debug("%s: removing link, cpu: %d\n", __func__, cpu);
 	cpufreq_cpu_put(data);
 	unlock_policy_rwsem_write(cpu);
