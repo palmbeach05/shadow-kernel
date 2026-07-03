@@ -1034,9 +1034,10 @@ static int __cpufreq_remove_dev(struct sys_device *sys_dev)
 			data->governor->name, CPUFREQ_NAME_LEN);
 #endif
 
-	per_cpu(cpufreq_cpu_data, cpu) = NULL;
 	cpus = cpumask_weight(data->cpus);
-	cpumask_clear_cpu(cpu, data->cpus);
+
+	if (cpus > 1)
+		cpumask_clear_cpu(cpu, data->cpus);
 
 	if (cpu != data->cpu) {
 		sysfs_remove_link(&sys_dev->kobj, "cpufreq");
@@ -1050,10 +1051,10 @@ static int __cpufreq_remove_dev(struct sys_device *sys_dev)
 			cpumask_set_cpu(cpu, data->cpus);
 
 			write_lock_irqsave(&cpufreq_driver_lock, flags);
+			per_cpu(cpufreq_cpu_data, cpu) = data;
 			ret = sysfs_create_link(&cpu_sys_dev->kobj, &data->kobj,
 					"cpufreq");
 			write_unlock_irqrestore(&cpufreq_driver_lock, flags);
-			unlock_policy_rwsem_write(cpu);
 			return -EINVAL;
 		}
 
