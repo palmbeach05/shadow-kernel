@@ -1255,7 +1255,6 @@ void do_timer(unsigned long ticks)
 {
 	jiffies_64 += ticks;
 	update_wall_time();
-	trace_timer_update_time(&xtime, &wall_to_monotonic);
 	calc_global_load();
 }
 
