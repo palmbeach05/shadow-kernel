@@ -325,6 +325,8 @@ static int cpcap_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 {
 	struct cpcap_rtc *rtc;
 	struct cpcap_time cpcap_tm;
+	struct rtc_time now_tm;
+	long now, scheduled;
 	int ret;
 
 	rtc = dev_get_drvdata(dev);
@@ -341,6 +343,20 @@ static int cpcap_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	}
 
 	cpcap2rtc_time(&alrm->time, &cpcap_tm);
+	
+	/* CRITICAL FIX: Reject alarms in the past - they're stale. */
+	if (rtc_valid_tm(&alrm->time) == 0) {
+		cpcap_rtc_read_time(dev, &now_tm);
+		rtc_tm_to_time(&now_tm, &now);
+		rtc_tm_to_time(&alrm->time, &scheduled);
+		
+		if (scheduled <= now) {
+			/* Stale alarm - disable and clear it */
+			alrm->enabled = 0;
+			dev_warn(dev, "Discarding stale alarm from hardware\n");
+			return 0;
+		}
+	}
 	return rtc_valid_tm(&alrm->time);
 }
 
@@ -407,6 +423,14 @@ static int __devinit cpcap_rtc_probe(struct platform_device *pdev)
 
 	rtc->cpcap = pdev->dev.platform_data;
 	platform_set_drvdata(pdev, rtc);
+
+	/* CRITICAL FIX: Mask and clear the RTC alarm interrupt BEFORE 
+	 * rtc_device_register reads the alarm registers. This prevents
+	 * stale hardware alarm values from being loaded into the kernel's
+	 * timerqueue and firing immediately. */
+	cpcap_irq_mask(rtc->cpcap, CPCAP_IRQ_TODA);
+	cpcap_irq_clear(rtc->cpcap, CPCAP_IRQ_TODA);
+
 	rtc->rtc_dev = rtc_device_register("cpcap_rtc", &pdev->dev,
 					   &cpcap_rtc_ops, THIS_MODULE);
 
@@ -430,7 +454,7 @@ static int __devinit cpcap_rtc_probe(struct platform_device *pdev)
 #endif
 	cpcap_irq_register(rtc->cpcap, CPCAP_IRQ_TODA, cpcap_rtc_irq, rtc);
 	cpcap_irq_mask(rtc->cpcap, CPCAP_IRQ_TODA);
-
+	
 	cpcap_irq_clear(rtc->cpcap, CPCAP_IRQ_1HZ);
 	cpcap_irq_register(rtc->cpcap, CPCAP_IRQ_1HZ, cpcap_rtc_irq, rtc);
 	cpcap_irq_mask(rtc->cpcap, CPCAP_IRQ_1HZ);
