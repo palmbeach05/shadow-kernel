@@ -384,6 +384,8 @@ static void cpcap_rtc_irq(enum cpcap_irqs irq, void *data)
 
 	switch (irq) {
 	case CPCAP_IRQ_TODA:
+		cpcap_irq_mask(rtc->cpcap, CPCAP_IRQ_TODA);
+		rtc->alarm_enabled = 0;
 		rtc_update_irq(rtc->rtc_dev, 1, RTC_AF | RTC_IRQF);
 		break;
 	case CPCAP_IRQ_1HZ:
@@ -444,6 +446,7 @@ static int __devexit cpcap_rtc_remove(struct platform_device *pdev)
 
 	rtc = platform_get_drvdata(pdev);
 
+	cpcap_irq_mask(rtc->cpcap, CPCAP_IRQ_TODA);
 	cpcap_irq_free(rtc->cpcap, CPCAP_IRQ_TODA);
 	cpcap_irq_free(rtc->cpcap, CPCAP_IRQ_1HZ);
 
@@ -456,7 +459,15 @@ static int __devexit cpcap_rtc_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void cpcap_rtc_shutdown(struct platform_device *pdev)
+{
+	struct cpcap_rtc *rtc = platform_get_drvdata(pdev);
+	printk(KERN_INFO "cpcap_rtc_shutdown: masking TODA\n");
+	cpcap_irq_mask(rtc->cpcap, CPCAP_IRQ_TODA);
+}
+
 static struct platform_driver cpcap_rtc_driver = {
+	.shutdown = cpcap_rtc_shutdown,
 	.driver = {
 		.name = "cpcap_rtc",
 	},
