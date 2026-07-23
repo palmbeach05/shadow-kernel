@@ -345,7 +345,7 @@ static int pm_qos_power_open(struct inode *inode, struct file *filp)
 		filp->private_data = (void *) pm_qos_add_request(pm_qos_class,
 				PM_QOS_DEFAULT_VALUE);
 
-		if (filp->private_data)
+		if (filp->private_data) {
 			unlock_kernel();
 			return 0;
 		}
