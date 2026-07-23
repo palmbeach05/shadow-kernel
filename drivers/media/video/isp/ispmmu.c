@@ -30,16 +30,22 @@ static struct iommu *isp_iommu;
 
 void *ispmmu_da_to_va(dma_addr_t da)
 {
+	if (!isp_iommu)
+		return NULL;
 	return da_to_va(isp_iommu, (u32)da);
 }
 
 dma_addr_t ispmmu_vmalloc(size_t bytes)
 {
+	if (!isp_iommu)
+		return -ENODEV;
 	return (dma_addr_t)iommu_vmalloc(isp_iommu, 0, bytes, IOMMU_FLAG);
 }
 
 void ispmmu_vfree(const dma_addr_t da)
 {
+	if (!isp_iommu)
+		return;
 	iommu_vfree(isp_iommu, (u32)da);
 }
 
@@ -47,6 +53,8 @@ dma_addr_t ispmmu_kmap(u32 pa, int size)
 {
 	void *da;
 
+	if (!isp_iommu)
+		return -ENODEV;
 	da = (void *)iommu_kmap(isp_iommu, 0, pa, size, IOMMU_FLAG);
 	if (IS_ERR(da))
 		return PTR_ERR(da);
@@ -56,6 +64,8 @@ dma_addr_t ispmmu_kmap(u32 pa, int size)
 
 void ispmmu_kunmap(dma_addr_t da)
 {
+	if (!isp_iommu)
+		return;
 	iommu_kunmap(isp_iommu, (u32)da);
 }
 
@@ -144,6 +154,8 @@ void ispmmu_vunmap(dma_addr_t da)
 {
 	struct sg_table *sgt;
 
+	if (!isp_iommu)
+		return;
 	sgt = iommu_vunmap(isp_iommu, (u32)da);
 	if (!sgt)
 		return;
