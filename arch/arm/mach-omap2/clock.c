@@ -587,7 +587,7 @@ static const struct clksel *omap2_get_clksel_by_parent(struct clk *clk,
 u32 omap2_clksel_round_rate_div(struct clk *clk, unsigned long target_rate,
 				u32 *new_div)
 {
-	unsigned long test_rate, parent_rate;
+	unsigned long test_rate, parent_rate = 0;
 	const struct clksel *clks;
 	const struct clksel_rate *clkr;
 	u32 last_div = 0;
@@ -782,7 +782,7 @@ int omap2_clksel_set_rate(struct clk *clk, unsigned long rate)
 
 	validrate = omap2_clksel_round_rate_div(clk, rate, &new_div);
 	if (validrate != rate) {
-		printk("%s: validrate (%lu) != rate (%lu)\n", __FUNCTION__, validrate, rate);
+		printk("%s: validrate (%u) != rate (%lu)\n", __FUNCTION__, validrate, rate);
 		return -EINVAL;
 	}
 

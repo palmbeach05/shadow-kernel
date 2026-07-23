@@ -50,13 +50,16 @@ void init_latency(struct shared_resource *resp)
 	return;
 }
 
+struct pm_qos_request_list;
+
+static struct pm_qos_request_list *omap3_mpu_latency_qos_ptr = NULL;
+
 /**
  * set_latency - Adds/Updates and removes the CPU_DMA_LATENCY in *pm_qos_params.
  * @resp: resource pointer
  * @latency: target latency to be set
  *
- * Returns 0 on success, or error values as returned by
- * pm_qos_update_requirement/pm_qos_add_requirement.
+ * Returns 0 on success.
  */
 int set_latency(struct shared_resource *resp, u32 latency)
 {
@@ -71,21 +74,20 @@ int set_latency(struct shared_resource *resp, u32 latency)
 	pm_qos_req_added = resp->resource_data;
 	if (latency == RES_LATENCY_DEFAULTLEVEL)
 		/* No more users left, remove the pm_qos_req if present */
-		if (*pm_qos_req_added) {
-			pm_qos_remove_requirement(PM_QOS_CPU_DMA_LATENCY,
-							resp->name);
+		if (*pm_qos_req_added && omap3_mpu_latency_qos_ptr) {
+			pm_qos_remove_request(omap3_mpu_latency_qos_ptr);
+			omap3_mpu_latency_qos_ptr = NULL;
 			*pm_qos_req_added = 0;
 			return 0;
 		}
 
-	if (*pm_qos_req_added) {
-		return pm_qos_update_requirement(PM_QOS_CPU_DMA_LATENCY,
-						resp->name, latency);
+	if (*pm_qos_req_added && omap3_mpu_latency_qos_ptr) {
+		pm_qos_update_request(omap3_mpu_latency_qos_ptr, latency);
 	} else {
 		*pm_qos_req_added = 1;
-		return pm_qos_add_requirement(PM_QOS_CPU_DMA_LATENCY,
-						resp->name, latency);
+		omap3_mpu_latency_qos_ptr = (struct pm_qos_request_list *)pm_qos_add_request(PM_QOS_CPU_DMA_LATENCY, latency);
 	}
+	return 0;
 }
 
 /**

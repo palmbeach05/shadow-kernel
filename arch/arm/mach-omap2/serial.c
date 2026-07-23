@@ -717,7 +717,6 @@ void __init omap_serial_early_init(void)
 			break;
 		}
 	}
-	return 0;
 }
 
 void __init omap_serial_ctsrts_init(unsigned char ctsrts[])
