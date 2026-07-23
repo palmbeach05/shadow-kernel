@@ -68,6 +68,9 @@ dma_addr_t ispmmu_vmap(const struct scatterlist *sglist,
 	unsigned int i;
 	struct scatterlist *sg, *src = (struct scatterlist *)sglist;
 
+	if (!isp_iommu)
+		return -ENODEV;
+
 	/*
 	 * convert isp sglist to iommu sgt
 	 * FIXME: should be fixed in the upper layer?
@@ -84,16 +87,17 @@ dma_addr_t ispmmu_vmap(const struct scatterlist *sglist,
 			   sg_dma_len(src + i));
 
 	da = (void *)iommu_vmap(isp_iommu, 0, sgt, IOMMU_FLAG);
-	if (IS_ERR(da))
+	if (IS_ERR(da)) {
+		err = PTR_ERR(da);
 		goto err_vmap;
-
+	}
 	return (dma_addr_t)da;
 
 err_vmap:
 	sg_free_table(sgt);
 err_sg_alloc:
 	kfree(sgt);
-	return -ENOMEM;
+	return err;
 }
 EXPORT_SYMBOL_GPL(ispmmu_vmap);
 
@@ -105,6 +109,9 @@ dma_addr_t ispmmu_vmap_pages(struct page **pages,
 	struct sg_table *sgt;
 	unsigned int i;
 	struct scatterlist *sg;
+
+	if (!isp_iommu)
+		return -ENODEV;
 
 	/* printk(KERN_INFO "%s: mapping pages %d\n", __func__, page_nr); */
 
@@ -119,16 +126,17 @@ dma_addr_t ispmmu_vmap_pages(struct page **pages,
 		sg_set_page(sg, pages[i], PAGE_SIZE, 0);
 
 	da = (void *)iommu_vmap(isp_iommu, 0, sgt, IOMMU_FLAG);
-	if (IS_ERR(da))
+	if (IS_ERR(da)) {
+		err = PTR_ERR(da);
 		goto err_vmap;
-
+	}
 	return (dma_addr_t)da;
 
 err_vmap:
 	sg_free_table(sgt);
 err_sg_alloc:
 	kfree(sgt);
-	return -ENOMEM;
+	return err;
 }
 EXPORT_SYMBOL_GPL(ispmmu_vmap_pages);
 
