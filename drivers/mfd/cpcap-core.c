@@ -406,6 +406,9 @@ static int __devinit cpcap_probe(struct spi_device *spi)
 	for (i = 0; i < CPCAP_NUM_REGULATORS; i++) {
 		struct platform_device *pdev;
 
+		if (i < CPCAP_SW5)
+			continue;
+
 		pdev = platform_device_alloc("cpcap-regltr", i);
 		if (!pdev) {
 			dev_err(&(spi->dev), "Cannot create regulator\n");
@@ -421,8 +424,11 @@ static int __devinit cpcap_probe(struct spi_device *spi)
 	for (i = 0; i < CPCAP_NUM_REGULATORS; i++) {
 		/* vusb has to be added after sw5 so skip it for now,
 		 * it will be added from probe of sw5 */
+		if (i < CPCAP_SW5)
+			continue;
 		if (i == CPCAP_VUSB)
 			continue;
+
 		platform_device_add(cpcap->regulator_pdev[i]);
 	}
 
