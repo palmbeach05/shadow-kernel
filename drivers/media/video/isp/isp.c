@@ -2901,6 +2901,7 @@ static int isp_probe(struct platform_device *pdev)
 		DPRINTK_ISPCTRL("ISP_ERR: clk_get for "
 				"cam_ick failed\n");
 		return PTR_ERR(isp_obj.cam_ick);
+		goto out_mmio;
 	}
 	isp_obj.cam_mclk = clk_get(&camera_dev, "cam_mclk");
 	if (IS_ERR(isp_obj.cam_mclk)) {
@@ -2984,6 +2985,10 @@ out_ispmmu_init:
 	free_irq(isp->irq, &isp_obj);
 out_request_irq:
 	clk_put(isp_obj.csi2_fck);
+out_clk_get_csi2_fclk:
+	clk_put(isp_obj.cam_mclk);
+out_clk_get_mclk:
+	clk_put(isp_obj.cam_ick);
 out_mmio:
 	/* unmap and release all mmio regions allocated in the loop above */
 	for (i = 0; i <= OMAP3_ISP_IOMEM_CSI2PHY; i++) {
@@ -2995,11 +3000,6 @@ out_mmio:
 			release_mem_region(isp->mmio_base_phys[i],
 					   isp->mmio_size[i]);
 	}
-out_clk_get_csi2_fclk:
-	clk_put(isp_obj.cam_mclk);
-out_clk_get_mclk:
-	clk_put(isp_obj.cam_ick);
-
 	return ret_err;
 }
 
