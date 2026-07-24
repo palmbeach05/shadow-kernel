@@ -2900,7 +2900,7 @@ static int isp_probe(struct platform_device *pdev)
 	if (IS_ERR(isp_obj.cam_ick)) {
 		DPRINTK_ISPCTRL("ISP_ERR: clk_get for "
 				"cam_ick failed\n");
-		return PTR_ERR(isp_obj.cam_ick);
+		ret_err = PTR_ERR(isp_obj.cam_ick);
 		goto out_mmio;
 	}
 	isp_obj.cam_mclk = clk_get(&camera_dev, "cam_mclk");
