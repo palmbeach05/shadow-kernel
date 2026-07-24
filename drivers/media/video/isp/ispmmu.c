@@ -176,7 +176,7 @@ void ispmmu_restore_context(void)
 		iommu_restore_ctx(isp_iommu);
 }
 
-int __init ispmmu_init(void)
+int ispmmu_init(void)
 {
 	int err = 0;
 
