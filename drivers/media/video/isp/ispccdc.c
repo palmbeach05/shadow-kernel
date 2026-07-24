@@ -1858,8 +1858,10 @@ int __init isp_ccdc_init(void)
 	ispccdc_obj.lsc_table_new.size = 0;
 	ispccdc_obj.lsc_table_inuse.addr = ispmmu_vmalloc(LSC_TABLE_INIT_SIZE);
 	ispccdc_obj.lsc_table_inuse.size = LSC_TABLE_INIT_SIZE;
-	if (IS_ERR_VALUE(ispccdc_obj.lsc_table_inuse.addr))
+	if (IS_ERR_VALUE(ispccdc_obj.lsc_table_inuse.addr)) {
+		ispccdc_obj.lsc_table_inuse.addr = PTR_FREE;
 		return -ENOMEM;
+	}
 	p = ispmmu_da_to_va(ispccdc_obj.lsc_table_inuse.addr);
 	if (!p) {
 		ispmmu_vfree(ispccdc_obj.lsc_table_inuse.addr);
