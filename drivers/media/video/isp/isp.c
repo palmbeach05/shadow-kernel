@@ -2999,10 +2999,11 @@ out_mmio:
 			iounmap((void __iomem *)isp->mmio_base[i]);
 			isp->mmio_base[i] = 0;
 		}
-		if (isp->mmio_base_phys[i])
+		if (isp->mmio_base_phys[i]) {
 			release_mem_region(isp->mmio_base_phys[i],
 					   isp->mmio_size[i]);
 			isp->mmio_base_phys[i] = 0; /* prevent double-release on re-entry */
+		}
 	}
 	platform_set_drvdata(pdev, NULL);
 	kfree(isp);
