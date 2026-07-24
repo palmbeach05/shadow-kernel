@@ -2902,6 +2902,8 @@ static int isp_probe(struct platform_device *pdev)
 		DPRINTK_ISPCTRL("ISP_ERR: clk_get for "
 				"cam_ick failed\n");
 		ret_err = PTR_ERR(isp_obj.cam_ick);
+		/* cam_ick was never obtained; jump past out_clk_get_ick
+		 * to avoid clk_put on an invalid handle. */
 		goto out_mmio;
 	}
 	isp_obj.cam_mclk = clk_get(&camera_dev, "cam_mclk");
@@ -3000,6 +3002,7 @@ out_mmio:
 		if (isp->mmio_base_phys[i])
 			release_mem_region(isp->mmio_base_phys[i],
 					   isp->mmio_size[i]);
+			isp->mmio_base_phys[i] = 0; /* prevent double-release on re-entry */
 	}
 	platform_set_drvdata(pdev, NULL);
 	kfree(isp);
