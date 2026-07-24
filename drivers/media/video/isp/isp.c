@@ -2856,29 +2856,29 @@ static int isp_probe(struct platform_device *pdev)
 		struct resource *mem;
 		/* request the mem region for the camera registers */
 		mem = platform_get_resource(pdev, IORESOURCE_MEM, i);
-		if (!mem) {
-			dev_err(isp->dev, "no mem resource?\n");
-			return -ENODEV;
+		/* no-resource case */
+		if (!mem[i].start) {
+    		ret = -ENODEV;
+    		goto out_ispmmu_init;
 		}
 
-		if (!request_mem_region(mem->start, mem->end - mem->start + 1,
-					pdev->name)) {
-			dev_err(isp->dev,
-				"cannot reserve camera register I/O region\n");
-			return -ENODEV;
-
+		/* request_mem_region failure */
+		if (!request_mem_region(mem[i].start, isp_mem_size, "omap3isp")) {
+			ret = -EBUSY;
+			goto out_ispmmu_init;
 		}
 		isp->mmio_base_phys[i] = mem->start;
 		isp->mmio_size[i] = mem->end - mem->start + 1;
 
 		/* map the region */
-		isp->mmio_base[i] = (unsigned long)
+		isp->mmio_base[i] = (unsigned long)ioremap_nocache(...);
 			ioremap_nocache(isp->mmio_base_phys[i],
 					isp->mmio_size[i]);
 		if (!isp->mmio_base[i]) {
-			dev_err(isp->dev,
-				"cannot map camera register I/O region\n");
-			return -ENODEV;
+			ret = -ENOMEM;
+			release_mem_region(isp->mmio_base_phys[i], isp->mmio_size[i]);
+			isp->mmio_base_phys[i] = 0;   /* zero so the cleanup loop skips it */
+			goto out_ispmmu_init;
 		}
 	}
 
