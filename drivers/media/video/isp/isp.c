@@ -2858,6 +2858,7 @@ static int isp_probe(struct platform_device *pdev)
 		mem = platform_get_resource(pdev, IORESOURCE_MEM, i);
 		if (!mem) {
 			dev_err(isp->dev, "no mem resource?\n");
+			ret_err = -ENODEV;
 			goto out_mmio;
 		}
 
