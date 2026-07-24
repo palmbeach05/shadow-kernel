@@ -1863,6 +1863,7 @@ int __init isp_ccdc_init(void)
 	p = ispmmu_da_to_va(ispccdc_obj.lsc_table_inuse.addr);
 	if (!p) {
 		ispmmu_vfree(ispccdc_obj.lsc_table_inuse.addr);
+		ispccdc_obj.lsc_table_inuse.addr = PTR_FREE;
 		return -ENODEV;
 	}
 	memset(p, 0x40, LSC_TABLE_INIT_SIZE);
