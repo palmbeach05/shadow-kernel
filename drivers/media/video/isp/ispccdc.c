@@ -1878,7 +1878,6 @@ int __init isp_ccdc_init(void)
  **/
 void isp_ccdc_cleanup(void)
 {
-	ispmmu_vfree(ispccdc_obj.lsc_table_inuse.addr);
 	if (ispccdc_obj.lsc_table_inuse.addr != PTR_FREE) {
 		ispmmu_vfree(ispccdc_obj.lsc_table_inuse.addr);
 		ispccdc_obj.lsc_table_inuse.addr = PTR_FREE;
