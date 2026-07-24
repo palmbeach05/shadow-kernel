@@ -2920,36 +2920,7 @@ static int isp_probe(struct platform_device *pdev)
 		ret_err = PTR_ERR(isp_obj.csi2_fck);
 		goto out_clk_get_csi2_fclk;
 	}
-	ret_err = isp_ccdc_init();
-	if (ret_err) {
-		dev_err(isp->dev, "isp_ccdc_init failed: %d\n", ret_err);
-		goto out_isp_ccdc;
-	}
-	ret_err = isp_hist_init();
-	if (ret_err) {
-		dev_err(isp->dev, "isp_hist_init failed: %d\n", ret_err);
-		goto out_isp_hist;
-	}
-	ret_err = isp_preview_init();
-	if (ret_err) {
-		dev_err(isp->dev, "isp_preview_init failed: %d\n", ret_err);
-		goto out_isp_preview;
-	}
-	ret_err = isp_resizer_init();
-	if (ret_err) {
-		dev_err(isp->dev, "isp_resizer_init failed: %d\n", ret_err);
-		goto out_isp_resizer;
-	}
-	ret_err = isp_af_init();
-	if (ret_err) {
-		dev_err(isp->dev, "isp_af_init failed: %d\n", ret_err);
-		goto out_isp_af;
-	}
-	ret_err = isp_aewb_init();
-	if (ret_err) {
-		dev_err(isp->dev, "isp_aewb_init failed: %d\n", ret_err);
-		goto out_isp_aewb;
-	}
+
 	if (request_irq(isp->irq, omap34xx_isp_isr, IRQF_SHARED,
 			"Omap 3 Camera ISP", &isp_obj)) {
 		DPRINTK_ISPCTRL("Could not install ISR\n");
@@ -3024,6 +2995,8 @@ out_isp_hist:
 	isp_hist_cleanup();
 out_isp_ccdc:
 	isp_ccdc_cleanup();
+	omap3isp = NULL;
+	goto out_clk_get_csi2_fclk;		/* IRQ not yet registered - skip free_irq */
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
