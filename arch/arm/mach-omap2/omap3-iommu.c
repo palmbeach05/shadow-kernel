@@ -89,7 +89,7 @@ err_out:
 		platform_device_put(omap3_iommu_pdev[i]);
 	return err;
 }
-module_init(omap3_iommu_init);
+subsys_initcall(omap3_iommu_init);
 
 static void __exit omap3_iommu_exit(void)
 {
