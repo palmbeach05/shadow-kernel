@@ -989,7 +989,7 @@ static int __init omap_iommu_init(void)
 
 	return platform_driver_register(&omap_iommu_driver);
 }
-module_init(omap_iommu_init);
+subsys_initcall(omap_iommu_init);
 
 static void __exit omap_iommu_exit(void)
 {
