@@ -2977,6 +2977,16 @@ static int isp_probe(struct platform_device *pdev)
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
+	/* unmap and release all mmio regions allocated in the loop above */
+	for (i = 0; i <= OMAP3_ISP_IOMEM_CSI2PHY; i++) {
+		if (isp->mmio_base[i]) {
+			iounmap((void __iomem *)isp->mmio_base[i]);
+			isp->mmio_base[i] = 0;
+		}
+		if (isp->mmio_base_phys[i])
+			release_mem_region(isp->mmio_base_phys[i],
+					   isp->mmio_size[i]);
+	}
 out_request_irq:
 	clk_put(isp_obj.csi2_fck);
 out_clk_get_csi2_fclk:
