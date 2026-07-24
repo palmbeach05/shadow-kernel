@@ -3001,6 +3001,7 @@ out_mmio:
 			release_mem_region(isp->mmio_base_phys[i],
 					   isp->mmio_size[i]);
 	}
+	kfree(isp);
 	return ret_err;
 }
 
