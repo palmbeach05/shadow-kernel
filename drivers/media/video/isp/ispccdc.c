@@ -1861,6 +1861,10 @@ int __init isp_ccdc_init(void)
 	if (IS_ERR_VALUE(ispccdc_obj.lsc_table_inuse.addr))
 		return -ENOMEM;
 	p = ispmmu_da_to_va(ispccdc_obj.lsc_table_inuse.addr);
+	if (!p) {
+		ispmmu_vfree(ispccdc_obj.lsc_table_inuse.addr);
+		return -ENODEV;
+	}
 	memset(p, 0x40, LSC_TABLE_INIT_SIZE);
 
 	ispccdc_obj.shadow_update = 0;
