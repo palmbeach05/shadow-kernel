@@ -2856,36 +2856,41 @@ static int isp_probe(struct platform_device *pdev)
 		struct resource *mem;
 		/* request the mem region for the camera registers */
 		mem = platform_get_resource(pdev, IORESOURCE_MEM, i);
-		/* no-resource case */
-		if (!mem[i].start) {
-    		ret = -ENODEV;
-    		goto out_ispmmu_init;
+		if (!mem) {
+			dev_err(isp->dev, "no mem resource?\n");
+			goto out_mmio;
 		}
 
-		/* request_mem_region failure */
-		if (!request_mem_region(mem[i].start, isp_mem_size, "omap3isp")) {
-			ret = -EBUSY;
-			goto out_ispmmu_init;
+		if (!request_mem_region(mem->start, mem->end - mem->start + 1,
+					pdev->name)) {
+			dev_err(isp->dev,
+				"cannot reserve camera register I/O region\n");
+			ret_err = -EBUSY;
+			goto out_mmio;
 		}
 		isp->mmio_base_phys[i] = mem->start;
 		isp->mmio_size[i] = mem->end - mem->start + 1;
 
 		/* map the region */
-		isp->mmio_base[i] = (unsigned long)ioremap_nocache(...);
+		isp->mmio_base[i] = (unsigned long)
 			ioremap_nocache(isp->mmio_base_phys[i],
 					isp->mmio_size[i]);
 		if (!isp->mmio_base[i]) {
-			ret = -ENOMEM;
-			release_mem_region(isp->mmio_base_phys[i], isp->mmio_size[i]);
-			isp->mmio_base_phys[i] = 0;   /* zero so the cleanup loop skips it */
-			goto out_ispmmu_init;
+			dev_err(isp->dev,
+				"cannot map camera register I/O region\n");
+			ret_err = -ENOMEM;
+			release_mem_region(isp->mmio_base_phys[i],
+					   isp->mmio_size[i]);
+			isp->mmio_base_phys[i] = 0;
+			goto out_mmio;
 		}
 	}
 
 	isp->irq = platform_get_irq(pdev, 0);
 	if (isp->irq <= 0) {
 		dev_err(isp->dev, "no irq for camera?\n");
-		return -ENODEV;
+		ret_err = -ENODEV;
+		goto out_mmio;   /* IRQ not registered yet — skip free_irq */
 	}
 
 	isp_obj.mclk_hz = CM_CAM_MCLK_HZ;
@@ -2977,6 +2982,9 @@ static int isp_probe(struct platform_device *pdev)
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
+out_request_irq:
+	clk_put(isp_obj.csi2_fck);
+out_mmio:
 	/* unmap and release all mmio regions allocated in the loop above */
 	for (i = 0; i <= OMAP3_ISP_IOMEM_CSI2PHY; i++) {
 		if (isp->mmio_base[i]) {
@@ -2987,8 +2995,6 @@ out_ispmmu_init:
 			release_mem_region(isp->mmio_base_phys[i],
 					   isp->mmio_size[i]);
 	}
-out_request_irq:
-	clk_put(isp_obj.csi2_fck);
 out_clk_get_csi2_fclk:
 	clk_put(isp_obj.cam_mclk);
 out_clk_get_mclk:
