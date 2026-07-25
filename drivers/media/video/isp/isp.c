@@ -2982,7 +2982,7 @@ static int isp_probe(struct platform_device *pdev)
 		dev_err(isp->dev, "isp_hist_init failed: %d\n", ret_err);
 		goto out_isp_hist;
 	}
-	ret_err = isp_aewb_init();
+	ret_err = isph3a_aewb_init();
 	if (ret_err) {
 		dev_err(isp->dev, "isp_aewb_init failed: %d\n", ret_err);
 		goto out_isp_aewb;
@@ -3026,7 +3026,7 @@ out_isp_resizer:
 out_isp_preview:
 	isp_preview_cleanup();
 out_isp_aewb:
-	/* isph3a_aewb has no cleanup function */
+	isph3a_aewb_cleanup();
 out_isp_hist:
 	isp_hist_cleanup();
 out_isp_ccdc:
