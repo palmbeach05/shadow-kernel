@@ -3034,9 +3034,9 @@ static int isp_probe(struct platform_device *pdev)
 #if defined(CONFIG_VIDEO_OMAP3_HP3A)
 out_isp_mem_process:
 	isp_mem_process_cleanup();
+	isp_csi2_cleanup();
 #endif
 out_isp_csi2:
-	isp_csi2_cleanup();
 #if !defined(CONFIG_VIDEO_OMAP3_HP3A)
 out_isp_af:
 	isp_af_cleanup();
