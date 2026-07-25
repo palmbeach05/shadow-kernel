@@ -202,9 +202,17 @@ int ispmmu_init(void)
 
 void ispmmu_cleanup(void)
 {
-	isp_get();
+	/*
+	 * Do not wrap this in isp_get()/isp_put(): when the ISP is idle
+	 * (ref_count == 0), isp_get() would trigger isp_tmp_buf_alloc(),
+	 * allocating a new mapping via isp_iommu right before it is
+	 * released below, and isp_put() would then trigger
+	 * isp_tmp_buf_free(), which uses isp_iommu after iommu_put() has
+	 * already released it. iommu_put() manages its own clock
+	 * teardown internally, so no external isp_get()/isp_put() pair
+	 * is required here.
+	 */
 	if (isp_iommu)
 		iommu_put(isp_iommu);
-	isp_put();
 	isp_iommu = NULL;
 }
