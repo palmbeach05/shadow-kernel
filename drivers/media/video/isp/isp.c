@@ -2974,11 +2974,7 @@ static int isp_probe(struct platform_device *pdev)
 		dev_err(isp->dev, "isp_csi2_init failed: %d\n", ret_err);
 		goto out_isp_csi2;
 	}
-	ret_err = isp_mem_process_init();
-	if (ret_err) {
-		dev_err(isp->dev, "isp_mem_process_init failed: %d\n", ret_err);
-		goto out_isp_mem_process;
-	}
+	isp_mem_process_init();
 #else
 	ret_err = isp_ccdc_init();
 	if (ret_err) {
@@ -3032,8 +3028,6 @@ static int isp_probe(struct platform_device *pdev)
 	return 0;
 
 #if defined(CONFIG_VIDEO_OMAP3_HP3A)
-out_isp_mem_process:
-	isp_csi2_cleanup();
 out_isp_csi2:
 	isp_resizer_cleanup();
 out_isp_resizer:
@@ -3061,7 +3055,8 @@ out_isp_ccdc:
 	/* fall through: IRQ and clocks acquired before sub-module inits */
 out_ispmmu_init:
 	omap3isp = NULL;
-	free_irq(isp->irq, &isp_obj);
+	if (isp->irq > 0)
+		free_irq(isp->irq, &isp_obj);
 out_request_irq:
 	clk_put(isp_obj.csi2_fck);
 out_clk_get_csi2_fclk:
