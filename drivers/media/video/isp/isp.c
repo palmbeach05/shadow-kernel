@@ -3019,20 +3019,21 @@ static int isp_probe(struct platform_device *pdev)
 #endif
 	return 0;
 
-out_isp_aewb:
-	/* isp_aewb has no cleanup, fall through */
 out_isp_af:
 	isp_af_cleanup();
 out_isp_resizer:
 	isp_resizer_cleanup();
 out_isp_preview:
 	isp_preview_cleanup();
+out_isp_aewb:
+	/* isph3a_aewb has no cleanup function */
 out_isp_hist:
 	isp_hist_cleanup();
 out_isp_ccdc:
 	isp_ccdc_cleanup();
+	ispmmu_cleanup();
 	omap3isp = NULL;
-	goto out_clk_get_csi2_fclk;		/* IRQ not yet registered - skip free_irq */
+	goto out_clk_get_csi2_fclk;
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
