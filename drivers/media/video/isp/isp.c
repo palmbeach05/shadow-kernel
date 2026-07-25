@@ -3033,27 +3033,31 @@ static int isp_probe(struct platform_device *pdev)
 
 #if defined(CONFIG_VIDEO_OMAP3_HP3A)
 out_isp_mem_process:
-	/* isp_mem_process_init() failed - no cleanup for it */
 	isp_csi2_cleanup();
-#endif
 out_isp_csi2:
-#if !defined(CONFIG_VIDEO_OMAP3_HP3A)
+	isp_resizer_cleanup();
+out_isp_resizer:
+	isp_preview_cleanup();
+out_isp_preview:
+	isp_ccdc_cleanup();
+out_isp_ccdc:
+	ispmmu_cleanup();
+#else
+out_isp_csi2:
 	isp_af_cleanup();
 out_isp_af:
-#endif
-out_isp_resizer:
 	isp_resizer_cleanup();
-out_isp_preview:
+out_isp_resizer:
 	isp_preview_cleanup();
-#if !defined(CONFIG_VIDEO_OMAP3_HP3A)
-out_isp_aewb:
+out_isp_preview:
 	isph3a_aewb_cleanup();
-out_isp_hist:
+out_isp_aewb:
 	isp_hist_cleanup();
-#endif
-out_isp_ccdc:
+out_isp_hist:
 	isp_ccdc_cleanup();
+out_isp_ccdc:
 	ispmmu_cleanup();
+#endif
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
