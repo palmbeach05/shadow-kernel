@@ -2902,8 +2902,8 @@ static int isp_probe(struct platform_device *pdev)
 		DPRINTK_ISPCTRL("ISP_ERR: clk_get for "
 				"cam_ick failed\n");
 		ret_err = PTR_ERR(isp_obj.cam_ick);
-		/* cam_ick was never obtained; jump past out_clk_get_ick
-		 * to avoid clk_put on an invalid handle. */
+		/* cam_ick acquisition failed; jump straight to out_mmio
+		 * to skip clk_put calls on unacquired clock handles. */
 		goto out_mmio;
 	}
 	isp_obj.cam_mclk = clk_get(&camera_dev, "cam_mclk");
