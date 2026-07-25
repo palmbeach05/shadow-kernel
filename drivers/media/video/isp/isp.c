@@ -3019,21 +3019,25 @@ static int isp_probe(struct platform_device *pdev)
 #endif
 	return 0;
 
+#if !defined(CONFIG_VIDEO_OMAP3_HP3A)
 out_isp_af:
 	isp_af_cleanup();
+#endif
 out_isp_resizer:
 	isp_resizer_cleanup();
 out_isp_preview:
 	isp_preview_cleanup();
+#if !defined(CONFIG_VIDEO_OMAP3_HP3A)
 out_isp_aewb:
 	isph3a_aewb_cleanup();
 out_isp_hist:
 	isp_hist_cleanup();
+#endif
 out_isp_ccdc:
 	isp_ccdc_cleanup();
 	ispmmu_cleanup();
 	omap3isp = NULL;
-	goto out_clk_get_csi2_fclk;
+	goto out_ispmmu_init;
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
