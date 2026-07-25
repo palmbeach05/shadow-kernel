@@ -3038,8 +3038,8 @@ out_isp_mem_process:
 #endif
 out_isp_csi2:
 #if !defined(CONFIG_VIDEO_OMAP3_HP3A)
-out_isp_af:
 	isp_af_cleanup();
+out_isp_af:
 #endif
 out_isp_resizer:
 	isp_resizer_cleanup();
@@ -3054,12 +3054,11 @@ out_isp_hist:
 out_isp_ccdc:
 	isp_ccdc_cleanup();
 	ispmmu_cleanup();
-out_request_irq:
-	clk_put(isp_obj.csi2_fck);
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
-	goto out_ispmmu_init;
+out_request_irq:
+	clk_put(isp_obj.csi2_fck);
 out_clk_get_csi2_fclk:
 	clk_put(isp_obj.cam_mclk);
 out_clk_get_mclk:
