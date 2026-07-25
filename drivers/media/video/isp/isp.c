@@ -3036,8 +3036,6 @@ out_isp_hist:
 out_isp_ccdc:
 	isp_ccdc_cleanup();
 	ispmmu_cleanup();
-	omap3isp = NULL;
-	goto out_ispmmu_init;
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
