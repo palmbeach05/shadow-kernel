@@ -3033,7 +3033,7 @@ static int isp_probe(struct platform_device *pdev)
 
 #if defined(CONFIG_VIDEO_OMAP3_HP3A)
 out_isp_mem_process:
-	isp_mem_process_cleanup();
+	/* isp_mem_process_init() failed - no cleanup for it */
 	isp_csi2_cleanup();
 #endif
 out_isp_csi2:
@@ -3054,11 +3054,12 @@ out_isp_hist:
 out_isp_ccdc:
 	isp_ccdc_cleanup();
 	ispmmu_cleanup();
+out_request_irq:
+	clk_put(isp_obj.csi2_fck);
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
-out_request_irq:
-	clk_put(isp_obj.csi2_fck);
+	goto out_ispmmu_init;
 out_clk_get_csi2_fclk:
 	clk_put(isp_obj.cam_mclk);
 out_clk_get_mclk:
