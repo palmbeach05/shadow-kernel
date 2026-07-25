@@ -2975,10 +2975,7 @@ static int isp_probe(struct platform_device *pdev)
 		goto out_isp_csi2;
 	}
 	ret_err = isp_mem_process_init();
-	if (ret_err) {
-		dev_err(isp->dev, "isp_mem_process_init failed: %d\n", ret_err);
-		goto out_isp_mem_process;
-	}
+	isp_mem_process_init();
 #else
 	ret_err = isp_ccdc_init();
 	if (ret_err) {
@@ -3032,8 +3029,6 @@ static int isp_probe(struct platform_device *pdev)
 	return 0;
 
 #if defined(CONFIG_VIDEO_OMAP3_HP3A)
-out_isp_mem_process:
-	isp_csi2_cleanup();
 out_isp_csi2:
 	isp_resizer_cleanup();
 out_isp_resizer:
@@ -3044,7 +3039,7 @@ out_isp_ccdc:
 	ispmmu_cleanup();
 #else
 out_isp_csi2:
-	isp_af_cleanup();
+	isp_af_exit();
 out_isp_af:
 	isp_resizer_cleanup();
 out_isp_resizer:
