@@ -30,16 +30,22 @@ static struct iommu *isp_iommu;
 
 void *ispmmu_da_to_va(dma_addr_t da)
 {
+	if (!isp_iommu)
+		return NULL;
 	return da_to_va(isp_iommu, (u32)da);
 }
 
 dma_addr_t ispmmu_vmalloc(size_t bytes)
 {
+	if (!isp_iommu)
+		return -ENODEV;
 	return (dma_addr_t)iommu_vmalloc(isp_iommu, 0, bytes, IOMMU_FLAG);
 }
 
 void ispmmu_vfree(const dma_addr_t da)
 {
+	if (!isp_iommu)
+		return;
 	iommu_vfree(isp_iommu, (u32)da);
 }
 
@@ -47,6 +53,8 @@ dma_addr_t ispmmu_kmap(u32 pa, int size)
 {
 	void *da;
 
+	if (!isp_iommu)
+		return -ENODEV;
 	da = (void *)iommu_kmap(isp_iommu, 0, pa, size, IOMMU_FLAG);
 	if (IS_ERR(da))
 		return PTR_ERR(da);
@@ -56,6 +64,8 @@ dma_addr_t ispmmu_kmap(u32 pa, int size)
 
 void ispmmu_kunmap(dma_addr_t da)
 {
+	if (!isp_iommu)
+		return;
 	iommu_kunmap(isp_iommu, (u32)da);
 }
 
@@ -67,6 +77,9 @@ dma_addr_t ispmmu_vmap(const struct scatterlist *sglist,
 	struct sg_table *sgt;
 	unsigned int i;
 	struct scatterlist *sg, *src = (struct scatterlist *)sglist;
+
+	if (!isp_iommu)
+		return -ENODEV;
 
 	/*
 	 * convert isp sglist to iommu sgt
@@ -84,16 +97,17 @@ dma_addr_t ispmmu_vmap(const struct scatterlist *sglist,
 			   sg_dma_len(src + i));
 
 	da = (void *)iommu_vmap(isp_iommu, 0, sgt, IOMMU_FLAG);
-	if (IS_ERR(da))
+	if (IS_ERR(da)) {
+		err = PTR_ERR(da);
 		goto err_vmap;
-
+	}
 	return (dma_addr_t)da;
 
 err_vmap:
 	sg_free_table(sgt);
 err_sg_alloc:
 	kfree(sgt);
-	return -ENOMEM;
+	return err;
 }
 EXPORT_SYMBOL_GPL(ispmmu_vmap);
 
@@ -105,6 +119,9 @@ dma_addr_t ispmmu_vmap_pages(struct page **pages,
 	struct sg_table *sgt;
 	unsigned int i;
 	struct scatterlist *sg;
+
+	if (!isp_iommu)
+		return -ENODEV;
 
 	/* printk(KERN_INFO "%s: mapping pages %d\n", __func__, page_nr); */
 
@@ -119,16 +136,17 @@ dma_addr_t ispmmu_vmap_pages(struct page **pages,
 		sg_set_page(sg, pages[i], PAGE_SIZE, 0);
 
 	da = (void *)iommu_vmap(isp_iommu, 0, sgt, IOMMU_FLAG);
-	if (IS_ERR(da))
+	if (IS_ERR(da)) {
+		err = PTR_ERR(da);
 		goto err_vmap;
-
+	}
 	return (dma_addr_t)da;
 
 err_vmap:
 	sg_free_table(sgt);
 err_sg_alloc:
 	kfree(sgt);
-	return -ENOMEM;
+	return err;
 }
 EXPORT_SYMBOL_GPL(ispmmu_vmap_pages);
 
@@ -136,6 +154,8 @@ void ispmmu_vunmap(dma_addr_t da)
 {
 	struct sg_table *sgt;
 
+	if (!isp_iommu)
+		return;
 	sgt = iommu_vunmap(isp_iommu, (u32)da);
 	if (!sgt)
 		return;
@@ -156,26 +176,43 @@ void ispmmu_restore_context(void)
 		iommu_restore_ctx(isp_iommu);
 }
 
-int __init ispmmu_init(void)
+int ispmmu_init(void)
 {
 	int err = 0;
 
-	isp_get();
+	/*
+	 * Do not wrap this in isp_get()/isp_put(): isp_get() enables the
+	 * ISP clocks and, on the first acquisition, allocates the LSC
+	 * workaround buffer via isp_tmp_buf_alloc(), which itself depends
+	 * on isp_iommu being already set up. Calling isp_get() here runs
+	 * that allocation before isp_iommu is assigned below, causing a
+	 * spurious "ispmmu_vmap mapping failed" / "Couldn't allocate lsc
+	 * workaround memory" failure during probe. iommu_get()/iommu_enable()
+	 * manage their own clock (obj->clk) internally, so no external
+	 * clock enable is required here.
+	 */
 	isp_iommu = iommu_get("isp");
 	if (IS_ERR(isp_iommu)) {
 		err = PTR_ERR(isp_iommu);
 		isp_iommu = NULL;
 	}
-	isp_put();
 
 	return err;
 }
 
 void ispmmu_cleanup(void)
 {
-	isp_get();
+	/*
+	 * Do not wrap this in isp_get()/isp_put(): when the ISP is idle
+	 * (ref_count == 0), isp_get() would trigger isp_tmp_buf_alloc(),
+	 * allocating a new mapping via isp_iommu right before it is
+	 * released below, and isp_put() would then trigger
+	 * isp_tmp_buf_free(), which uses isp_iommu after iommu_put() has
+	 * already released it. iommu_put() manages its own clock
+	 * teardown internally, so no external isp_get()/isp_put() pair
+	 * is required here.
+	 */
 	if (isp_iommu)
 		iommu_put(isp_iommu);
-	isp_put();
 	isp_iommu = NULL;
 }

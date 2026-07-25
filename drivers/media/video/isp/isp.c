@@ -2732,25 +2732,25 @@ static int isp_remove(struct platform_device *pdev)
 	struct isp_device *isp = platform_get_drvdata(pdev);
 	int i;
 
+	if (!isp)
+		return 0;
+
 #ifdef CONFIG_VIDEO_OMAP3_HP3A
 	isp_csi2_cleanup();
 	isp_resizer_cleanup();
 	isp_preview_cleanup();
-	ispmmu_cleanup();
 	isp_ccdc_cleanup();
+	ispmmu_cleanup();
 #else
 	isp_csi2_cleanup();
 	isp_af_exit();
 	isp_resizer_cleanup();
 	isp_preview_cleanup();
-	ispmmu_cleanup();
 	isph3a_aewb_cleanup();
 	isp_hist_cleanup();
 	isp_ccdc_cleanup();
+	ispmmu_cleanup();
 #endif
-
-	if (!isp)
-		return 0;
 
 	clk_put(isp_obj.cam_ick);
 	clk_put(isp_obj.cam_mclk);
@@ -2858,15 +2858,16 @@ static int isp_probe(struct platform_device *pdev)
 		mem = platform_get_resource(pdev, IORESOURCE_MEM, i);
 		if (!mem) {
 			dev_err(isp->dev, "no mem resource?\n");
-			return -ENODEV;
+			ret_err = -ENODEV;
+			goto out_mmio;
 		}
 
 		if (!request_mem_region(mem->start, mem->end - mem->start + 1,
 					pdev->name)) {
 			dev_err(isp->dev,
 				"cannot reserve camera register I/O region\n");
-			return -ENODEV;
-
+			ret_err = -EBUSY;
+			goto out_mmio;
 		}
 		isp->mmio_base_phys[i] = mem->start;
 		isp->mmio_size[i] = mem->end - mem->start + 1;
@@ -2878,14 +2879,19 @@ static int isp_probe(struct platform_device *pdev)
 		if (!isp->mmio_base[i]) {
 			dev_err(isp->dev,
 				"cannot map camera register I/O region\n");
-			return -ENODEV;
+			ret_err = -ENOMEM;
+			release_mem_region(isp->mmio_base_phys[i],
+					   isp->mmio_size[i]);
+			isp->mmio_base_phys[i] = 0;
+			goto out_mmio;
 		}
 	}
 
 	isp->irq = platform_get_irq(pdev, 0);
 	if (isp->irq <= 0) {
 		dev_err(isp->dev, "no irq for camera?\n");
-		return -ENODEV;
+		ret_err = -ENODEV;
+		goto out_mmio;   /* IRQ not registered yet — skip free_irq */
 	}
 
 	isp_obj.mclk_hz = CM_CAM_MCLK_HZ;
@@ -2895,7 +2901,10 @@ static int isp_probe(struct platform_device *pdev)
 	if (IS_ERR(isp_obj.cam_ick)) {
 		DPRINTK_ISPCTRL("ISP_ERR: clk_get for "
 				"cam_ick failed\n");
-		return PTR_ERR(isp_obj.cam_ick);
+		ret_err = PTR_ERR(isp_obj.cam_ick);
+		/* cam_ick acquisition failed; jump straight to out_mmio
+		 * to skip clk_put calls on unacquired clock handles. */
+		goto out_mmio;
 	}
 	isp_obj.cam_mclk = clk_get(&camera_dev, "cam_mclk");
 	if (IS_ERR(isp_obj.cam_mclk)) {
@@ -2945,19 +2954,63 @@ static int isp_probe(struct platform_device *pdev)
 		goto out_ispmmu_init;
 
 #if defined(CONFIG_VIDEO_OMAP3_HP3A)
-	isp_ccdc_init();
-	isp_preview_init();
-	isp_resizer_init();
-	isp_csi2_init();
-	isp_mem_process_init();
+	ret_err = isp_ccdc_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_ccdc_init failed: %d\n", ret_err);
+		goto out_isp_ccdc;
+	}
+	ret_err = isp_preview_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_preview_init failed: %d\n", ret_err);
+		goto out_isp_preview;
+	}
+	ret_err = isp_resizer_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_resizer_init failed: %d\n", ret_err);
+		goto out_isp_resizer;
+	}
+	ret_err = isp_csi2_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_csi2_init failed: %d\n", ret_err);
+		goto out_isp_csi2;
+	}
+	isp_mem_process_init();	/* returns void — cannot fail, no error check needed */
 #else
-	isp_ccdc_init();
-	isp_hist_init();
-	isph3a_aewb_init();
-	isp_preview_init();
-	isp_resizer_init();
-	isp_af_init();
-	isp_csi2_init();
+	ret_err = isp_ccdc_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_ccdc_init failed: %d\n", ret_err);
+		goto out_isp_ccdc;
+	}
+	ret_err = isp_hist_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_hist_init failed: %d\n", ret_err);
+		goto out_isp_hist;
+	}
+	ret_err = isph3a_aewb_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_aewb_init failed: %d\n", ret_err);
+		goto out_isp_aewb;
+	}
+	ret_err = isp_preview_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_preview_init failed: %d\n", ret_err);
+		goto out_isp_preview;
+	}
+	ret_err = isp_resizer_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_resizer_init failed: %d\n", ret_err);
+		goto out_isp_resizer;
+	}
+	ret_err = isp_af_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_af_init failed: %d\n", ret_err);
+		goto out_isp_af;
+	}
+	ret_err = isp_csi2_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_csi2_init failed: %d\n", ret_err);
+		goto out_isp_csi2;
+	}
 #endif
 
 	isp_get();
@@ -2974,16 +3027,56 @@ static int isp_probe(struct platform_device *pdev)
 #endif
 	return 0;
 
+#if defined(CONFIG_VIDEO_OMAP3_HP3A)
+out_isp_csi2:
+	isp_resizer_cleanup();
+out_isp_resizer:
+	isp_preview_cleanup();
+out_isp_preview:
+	isp_ccdc_cleanup();
+out_isp_ccdc:
+#else
+out_isp_csi2:
+	isp_af_exit();
+out_isp_af:
+	isp_resizer_cleanup();
+out_isp_resizer:
+	isp_preview_cleanup();
+out_isp_preview:
+	isph3a_aewb_cleanup();
+out_isp_aewb:
+	isp_hist_cleanup();
+out_isp_hist:
+	isp_ccdc_cleanup();
+out_isp_ccdc:
+#endif
+	ispmmu_cleanup();	/* reached only if ispmmu_init() succeeded */
+	/* fall through: IRQ and clocks acquired before sub-module inits */
 out_ispmmu_init:
 	omap3isp = NULL;
-	free_irq(isp->irq, &isp_obj);
+	if (isp->irq > 0)
+		free_irq(isp->irq, &isp_obj);
 out_request_irq:
 	clk_put(isp_obj.csi2_fck);
 out_clk_get_csi2_fclk:
 	clk_put(isp_obj.cam_mclk);
 out_clk_get_mclk:
 	clk_put(isp_obj.cam_ick);
-
+out_mmio:
+	/* unmap and release all mmio regions allocated in the loop above */
+	for (i = 0; i <= OMAP3_ISP_IOMEM_CSI2PHY; i++) {
+		if (isp->mmio_base[i]) {
+			iounmap((void __iomem *)isp->mmio_base[i]);
+			isp->mmio_base[i] = 0;
+		}
+		if (isp->mmio_base_phys[i]) {
+			release_mem_region(isp->mmio_base_phys[i],
+					   isp->mmio_size[i]);
+			isp->mmio_base_phys[i] = 0; /* prevent double-release on re-entry */
+		}
+	}
+	platform_set_drvdata(pdev, NULL);
+	kfree(isp);
 	return ret_err;
 }
 
