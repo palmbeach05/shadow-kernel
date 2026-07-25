@@ -2732,6 +2732,9 @@ static int isp_remove(struct platform_device *pdev)
 	struct isp_device *isp = platform_get_drvdata(pdev);
 	int i;
 
+	if (!isp)
+		return 0;
+	
 #ifdef CONFIG_VIDEO_OMAP3_HP3A
 	isp_csi2_cleanup();
 	isp_resizer_cleanup();
@@ -2748,9 +2751,6 @@ static int isp_remove(struct platform_device *pdev)
 	isp_ccdc_cleanup();
 	ispmmu_cleanup();
 #endif
-
-	if (!isp)
-		return 0;
 
 	clk_put(isp_obj.cam_ick);
 	clk_put(isp_obj.cam_mclk);
@@ -2974,7 +2974,7 @@ static int isp_probe(struct platform_device *pdev)
 		dev_err(isp->dev, "isp_csi2_init failed: %d\n", ret_err);
 		goto out_isp_csi2;
 	}
-	isp_mem_process_init();
+	isp_mem_process_init();	/* returns void — cannot fail, no error check needed */
 #else
 	ret_err = isp_ccdc_init();
 	if (ret_err) {
