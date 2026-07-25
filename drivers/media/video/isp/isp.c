@@ -2736,17 +2736,17 @@ static int isp_remove(struct platform_device *pdev)
 	isp_csi2_cleanup();
 	isp_resizer_cleanup();
 	isp_preview_cleanup();
-	ispmmu_cleanup();
 	isp_ccdc_cleanup();
+	ispmmu_cleanup();
 #else
 	isp_csi2_cleanup();
 	isp_af_exit();
 	isp_resizer_cleanup();
 	isp_preview_cleanup();
-	ispmmu_cleanup();
 	isph3a_aewb_cleanup();
 	isp_hist_cleanup();
 	isp_ccdc_cleanup();
+	ispmmu_cleanup();
 #endif
 
 	if (!isp)
