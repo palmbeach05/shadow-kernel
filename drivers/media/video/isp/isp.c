@@ -2954,18 +2954,54 @@ static int isp_probe(struct platform_device *pdev)
 		goto out_ispmmu_init;
 
 #if defined(CONFIG_VIDEO_OMAP3_HP3A)
-	isp_ccdc_init();
-	isp_preview_init();
-	isp_resizer_init();
+	ret_err = isp_ccdc_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_ccdc_init failed: %d\n", ret_err);
+		goto out_isp_ccdc;
+	}
+	ret_err = isp_preview_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_preview_init failed: %d\n", ret_err);
+		goto out_isp_preview;
+	}
+	ret_err = isp_resizer_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_resizer_init failed: %d\n", ret_err);
+		goto out_isp_resizer;
+	}
 	isp_csi2_init();
 	isp_mem_process_init();
 #else
-	isp_ccdc_init();
-	isp_hist_init();
-	isph3a_aewb_init();
-	isp_preview_init();
-	isp_resizer_init();
-	isp_af_init();
+	ret_err = isp_ccdc_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_ccdc_init failed: %d\n", ret_err);
+		goto out_isp_ccdc;
+	}
+	ret_err = isp_hist_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_hist_init failed: %d\n", ret_err);
+		goto out_isp_hist;
+	}
+	ret_err = isp_aewb_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_aewb_init failed: %d\n", ret_err);
+		goto out_isp_aewb;
+	}
+	ret_err = isp_preview_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_preview_init failed: %d\n", ret_err);
+		goto out_isp_preview;
+	}
+	ret_err = isp_resizer_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_resizer_init failed: %d\n", ret_err);
+		goto out_isp_resizer;
+	}
+	ret_err = isp_af_init();
+	if (ret_err) {
+		dev_err(isp->dev, "isp_af_init failed: %d\n", ret_err);
+		goto out_isp_af;
+	}
 	isp_csi2_init();
 #endif
 
