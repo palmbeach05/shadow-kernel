@@ -180,13 +180,22 @@ int ispmmu_init(void)
 {
 	int err = 0;
 
-	isp_get();
+	/*
+	 * Do not wrap this in isp_get()/isp_put(): isp_get() enables the
+	 * ISP clocks and, on the first acquisition, allocates the LSC
+	 * workaround buffer via isp_tmp_buf_alloc(), which itself depends
+	 * on isp_iommu being already set up. Calling isp_get() here runs
+	 * that allocation before isp_iommu is assigned below, causing a
+	 * spurious "ispmmu_vmap mapping failed" / "Couldn't allocate lsc
+	 * workaround memory" failure during probe. iommu_get()/iommu_enable()
+	 * manage their own clock (obj->clk) internally, so no external
+	 * clock enable is required here.
+	 */
 	isp_iommu = iommu_get("isp");
 	if (IS_ERR(isp_iommu)) {
 		err = PTR_ERR(isp_iommu);
 		isp_iommu = NULL;
 	}
-	isp_put();
 
 	return err;
 }
