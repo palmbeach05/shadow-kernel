@@ -3029,6 +3029,7 @@ static int isp_probe(struct platform_device *pdev)
 
 #if defined(CONFIG_VIDEO_OMAP3_HP3A)
 out_isp_csi2:
+	isp_csi2_cleanup();
 	isp_resizer_cleanup();
 out_isp_resizer:
 	isp_preview_cleanup();
@@ -3052,6 +3053,7 @@ out_isp_hist:
 out_isp_ccdc:
 	ispmmu_cleanup();
 #endif
+	/* fall through: IRQ and clocks acquired before sub-module inits */
 out_ispmmu_init:
 	omap3isp = NULL;
 	free_irq(isp->irq, &isp_obj);
