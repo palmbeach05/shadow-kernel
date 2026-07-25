@@ -3035,7 +3035,6 @@ out_isp_resizer:
 out_isp_preview:
 	isp_ccdc_cleanup();
 out_isp_ccdc:
-	ispmmu_cleanup();
 #else
 out_isp_csi2:
 	isp_af_exit();
@@ -3050,8 +3049,8 @@ out_isp_aewb:
 out_isp_hist:
 	isp_ccdc_cleanup();
 out_isp_ccdc:
-	ispmmu_cleanup();
 #endif
+	ispmmu_cleanup();	/* reached only if ispmmu_init() succeeded */
 	/* fall through: IRQ and clocks acquired before sub-module inits */
 out_ispmmu_init:
 	omap3isp = NULL;
