@@ -2974,7 +2974,6 @@ static int isp_probe(struct platform_device *pdev)
 		dev_err(isp->dev, "isp_csi2_init failed: %d\n", ret_err);
 		goto out_isp_csi2;
 	}
-	ret_err = isp_mem_process_init();
 	isp_mem_process_init();
 #else
 	ret_err = isp_ccdc_init();
