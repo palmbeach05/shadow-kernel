@@ -330,25 +330,6 @@ static int qtouch_write_addr(struct qtouch_ts_data *ts, uint16_t addr,
 	return 0;
 }
 
-static uint16_t calc_csum(uint16_t curr_sum, void *_buf, int buf_sz)
-{
-	uint8_t *buf = _buf;
-	uint32_t new_sum;
-	int i;
-
-	while (buf_sz-- > 0) {
-		new_sum = (((uint32_t) curr_sum) << 8) | *(buf++);
-		for (i = 0; i < 8; ++i) {
-			if (new_sum & 0x800000)
-				new_sum ^= 0x800500;
-			new_sum <<= 1;
-		}
-		curr_sum = ((uint32_t) new_sum >> 8) & 0xffff;
-	}
-
-	return curr_sum;
-}
-
 struct qtouch_crc24 {
 	u32 value;
 	u8 first_byte;
@@ -1301,6 +1282,8 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 			obj->report_id_max = report_id - 1;
 		}
 	}
+
+	our_csum = qtouch_crc24_final(&crc);
 
 	if (!ts->msg_size) {
 		pr_err("%s: Message processing object not found. Bailing.\n",
