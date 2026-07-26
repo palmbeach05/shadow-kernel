@@ -1345,7 +1345,7 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 		pr_warning("%s: Checksum mismatch (0x%08x != 0x%08x)\n",
 			   __func__, our_csum, their_csum);
 		err = -ENODEV;
-		goto err_bad_checksum;
+		goto err_no_checksum;
 #endif
 	}
 
