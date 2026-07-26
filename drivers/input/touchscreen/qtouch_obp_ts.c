@@ -349,6 +349,49 @@ static uint16_t calc_csum(uint16_t curr_sum, void *_buf, int buf_sz)
 	return curr_sum;
 }
 
+struct qtouch_crc24 {
+	u32 value;
+	u8 first_byte;
+	bool have_first_byte;
+};
+
+static void qtouch_crc24_update(struct qtouch_crc24 *crc,
+				const u8 *buf, int len)
+{
+	u32 result;
+
+	while (len--) {
+		if (!crc->have_first_byte) {
+			crc->first_byte = *buf++;
+			crc->have_first_byte = true;
+			continue;
+		}
+
+		result = (crc->value << 1) ^
+			 (crc->first_byte | ((u32)*buf++ << 8));
+		if (result & 0x01000000)
+			result ^= 0x80001B;
+
+		crc->value = result & 0x00FFFFFF;
+		crc->have_first_byte = false;
+	}
+}
+
+static u32 qtouch_crc24_final(struct qtouch_crc24 *crc)
+{
+	if (crc->have_first_byte) {
+		u32 result = (crc->value << 1) ^ crc->first_byte;
+
+		if (result & 0x01000000)
+			result ^= 0x80001B;
+
+		crc->value = result & 0x00FFFFFF;
+		crc->have_first_byte = false;
+	}
+
+	return crc->value;
+}
+
 static inline struct qtm_object *find_obj(struct qtouch_ts_data *ts, int id)
 {
 	return &ts->obj_tbl[id];
