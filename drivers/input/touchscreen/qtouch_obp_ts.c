@@ -330,23 +330,47 @@ static int qtouch_write_addr(struct qtouch_ts_data *ts, uint16_t addr,
 	return 0;
 }
 
-static uint16_t calc_csum(uint16_t curr_sum, void *_buf, int buf_sz)
-{
-	uint8_t *buf = _buf;
-	uint32_t new_sum;
-	int i;
+struct qtouch_crc24 {
+	u32 value;
+	u8 first_byte;
+	bool have_first_byte;
+};
 
-	while (buf_sz-- > 0) {
-		new_sum = (((uint32_t) curr_sum) << 8) | *(buf++);
-		for (i = 0; i < 8; ++i) {
-			if (new_sum & 0x800000)
-				new_sum ^= 0x800500;
-			new_sum <<= 1;
+static void qtouch_crc24_update(struct qtouch_crc24 *crc,
+				const u8 *buf, int len)
+{
+	u32 result;
+
+	while (len--) {
+		if (!crc->have_first_byte) {
+			crc->first_byte = *buf++;
+			crc->have_first_byte = true;
+			continue;
 		}
-		curr_sum = ((uint32_t) new_sum >> 8) & 0xffff;
+
+		result = (crc->value << 1) ^
+			 (crc->first_byte | ((u32)*buf++ << 8));
+		if (result & 0x01000000)
+			result ^= 0x80001B;
+
+		crc->value = result & 0x00FFFFFF;
+		crc->have_first_byte = false;
+	}
+}
+
+static u32 qtouch_crc24_final(struct qtouch_crc24 *crc)
+{
+	if (crc->have_first_byte) {
+		u32 result = (crc->value << 1) ^ crc->first_byte;
+
+		if (result & 0x01000000)
+			result ^= 0x80001B;
+
+		crc->value = result & 0x00FFFFFF;
+		crc->have_first_byte = false;
 	}
 
-	return curr_sum;
+	return crc->value;
 }
 
 static inline struct qtm_object *find_obj(struct qtouch_ts_data *ts, int id)
@@ -1174,7 +1198,8 @@ err_alloc_msg_buf:
 static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 {
 	struct qtm_id_info qtm_info;
-	uint32_t our_csum = 0x0;
+	struct qtouch_crc24 crc = { 0 };
+	uint32_t our_csum;
 	uint32_t their_csum = 0x0;
 	uint8_t report_id;
 	uint8_t checksum[3];
@@ -1189,7 +1214,7 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 		pr_err("%s: Cannot read info object block\n", __func__);
 		goto err_read_info_block;
 	}
-	our_csum = calc_csum(our_csum, &qtm_info, sizeof(qtm_info));
+	qtouch_crc24_update(&crc, (const u8 *)&qtm_info, sizeof(qtm_info));
 
 	/* TODO: Add a version/family/variant check? */
 	pr_info("%s: Build version is 0x%x\n", __func__, qtm_info.version);
@@ -1228,7 +1253,7 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 			err = -EIO;
 			goto err_read_entry;
 		}
-		our_csum = calc_csum(our_csum, &entry, sizeof(entry));
+		qtouch_crc24_update(&crc, (const u8 *)&entry, sizeof(entry));
 		addr += sizeof(entry);
 
 		entry.size++;
@@ -1257,6 +1282,8 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 			obj->report_id_max = report_id - 1;
 		}
 	}
+
+	our_csum = qtouch_crc24_final(&crc);
 
 	if (!ts->msg_size) {
 		pr_err("%s: Message processing object not found. Bailing.\n",
@@ -1293,12 +1320,15 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 
 	their_csum = __le32_to_cpu(their_csum);
 	if (our_csum != their_csum) {
+#ifdef IGNORE_CHECKSUM_MISMATCH
 		pr_warning("%s: Checksum mismatch (0x%08x != 0x%08x) - "
-				"known calc_csum() limitation, non-fatal\n",
-				__func__, our_csum, their_csum);
-#ifndef IGNORE_CHECKSUM_MISMATCH
+			   "known calc_csum() limitation, non-fatal\n",
+			   __func__, our_csum, their_csum);
+#else
+		pr_warning("%s: Checksum mismatch (0x%08x != 0x%08x)\n",
+			   __func__, our_csum, their_csum);
 		err = -ENODEV;
-		goto err_bad_checksum;
+		goto err_no_checksum;
 #endif
 	}
 
