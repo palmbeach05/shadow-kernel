@@ -124,42 +124,24 @@ static void dispsw_override_ovl(struct dispsw_osi *osi,
 static void dispsw_handle_gfx_disable(int ovl_id,
 					struct omap_overlay_info *info)
 {
-	struct dispsw_osi *osi = NULL;
-	struct omap_overlay_info gfx_info;
-	int gfx = 0;
-	int prev;
-	int i;
-
-	/* If the GFX plane changed, just chk if it should be enabled */
-	if (ovl_id == OMAP_DSS_GFX) {
-		info->enabled = (g_dev->videoOverrideEnabled) ? false : true;
-	} else {
-		prev = g_dev->videoOverrideEnabled;
-		g_dev->videoOverrideEnabled = 0;
-		for (i = 0; i < MAX_OVERLAYS; i++) {
-			osi = &g_dev->osi[i];
-			if (osi->ovl == NULL)
-				continue;
-			/* Save the GFX plane idx for below*/
-			else if (osi->id == OMAP_DSS_GFX)
-				gfx = i;
-			/*
-			 *  For non-GFX planes, if they are enabled,
-			 *  overriden (meaning HDMI), disable the GFX plane.
-			 */
-			else if (osi->last_info.enabled == true	&&
-								osi->override)
-				g_dev->videoOverrideEnabled = 1;
-		}
-		if (g_dev->videoOverrideEnabled != prev) {
-			osi = &g_dev->osi[gfx];
-			memcpy(&gfx_info, &osi->last_info, sizeof(gfx_info));
-			if (gfx_info.enabled && osi->override)
-				dispsw_override_ovl(osi, &gfx_info);
-			if (gfx_info.enabled && g_dev->videoOverrideEnabled)
-				gfx_info.enabled = false;
-			osi->set_func(osi->ovl, &gfx_info);
-		}
+	prev = g_dev->videoOverrideEnabled;
+	g_dev->videoOverrideEnabled = 0;
+	for (i = 0; i < MAX_OVERLAYS; i++) {
+		osi = &g_dev->osi[i];
+		if (osi->ovl == NULL)
+			continue;
+		/* Save the GFX plane idx for below*/
+		else if (osi->id == OMAP_DSS_GFX)
+			gfx = i;
+	}
+	if (g_dev->videoOverrideEnabled != prev) {
+		osi = &g_dev->osi[gfx];
+		memcpy(&gfx_info, &osi->last_info, sizeof(gfx_info));
+		if (gfx_info.enabled && osi->override)
+			dispsw_override_ovl(osi, &gfx_info);
+		if (gfx_info.enabled && g_dev->videoOverrideEnabled)
+			gfx_info.enabled = false;
+		osi->set_func(osi->ovl, &gfx_info);
 	}
 }
 
