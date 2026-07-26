@@ -449,7 +449,7 @@ static void dispsw_override_ovl(struct dispsw_osi *osi,
 
 /* This function performs the substitute "set_overlay_info" operation
  */
-static int (struct omap_overlay *ovl,
+static int dispsw_ovl_set_info(struct omap_overlay *ovl,
 				struct omap_overlay_info *info)
 {
 	struct dispsw_osi *osi = NULL;
