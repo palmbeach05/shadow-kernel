@@ -1217,7 +1217,8 @@ err_alloc_msg_buf:
 static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 {
 	struct qtm_id_info qtm_info;
-	uint32_t our_csum = 0x0;
+	struct qtouch_crc24 crc = { 0 };
+	uint32_t our_csum;
 	uint32_t their_csum = 0x0;
 	uint8_t report_id;
 	uint8_t checksum[3];
@@ -1232,7 +1233,7 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 		pr_err("%s: Cannot read info object block\n", __func__);
 		goto err_read_info_block;
 	}
-	our_csum = calc_csum(our_csum, &qtm_info, sizeof(qtm_info));
+	qtouch_crc24_update(&crc, (const u8 *)&qtm_info, sizeof(qtm_info));
 
 	/* TODO: Add a version/family/variant check? */
 	pr_info("%s: Build version is 0x%x\n", __func__, qtm_info.version);
@@ -1271,7 +1272,7 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 			err = -EIO;
 			goto err_read_entry;
 		}
-		our_csum = calc_csum(our_csum, &entry, sizeof(entry));
+		qtouch_crc24_update(&crc, (const u8 *)&entry, sizeof(entry));
 		addr += sizeof(entry);
 
 		entry.size++;
