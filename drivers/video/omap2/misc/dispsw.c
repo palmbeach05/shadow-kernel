@@ -1099,8 +1099,6 @@ static int dispsw_open(struct inode *inode, struct file *file)
 
 	g_dev->opened = 1;
 
-	g_dev->videoOverrideEnabled = 0;
-
 failed:
 	mutex_unlock(&g_dev->mtx);
 	return rc;
@@ -1329,4 +1327,3 @@ module_exit(dispsw_exit);
 MODULE_DESCRIPTION("DSS2 Display Switcher");
 MODULE_AUTHOR("Motorola");
 MODULE_LICENSE("GPL");
-
