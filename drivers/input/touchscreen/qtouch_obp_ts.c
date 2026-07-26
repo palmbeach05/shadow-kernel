@@ -1293,8 +1293,9 @@ static int qtouch_process_info_block(struct qtouch_ts_data *ts)
 
 	their_csum = __le32_to_cpu(their_csum);
 	if (our_csum != their_csum) {
-		pr_warning("%s: Checksum mismatch (0x%08x != 0x%08x)\n",
-			   __func__, our_csum, their_csum);
+		pr_warning("%s: Checksum mismatch (0x%08x != 0x%08x) - "
+				"known calc_csum() limitation, non-fatal\n",
+				__func__, our_csum, their_csum);
 #ifndef IGNORE_CHECKSUM_MISMATCH
 		err = -ENODEV;
 		goto err_bad_checksum;

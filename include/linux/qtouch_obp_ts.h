@@ -78,9 +78,10 @@ enum {
 	QTM_OBJ_SPT_CTE_CONFIG		= 28,
 	QTM_OBJ_NOISESUPPRESSION_1	= 36,
 	QTM_OBJ_DBG_DIAG	= 37,
+	QTM_OBJ_RESERVED4	= 38,
 
 	/* Max number of objects currently defined */
-	QTM_OBP_MAX_OBJECT_NUM = QTM_OBJ_DBG_DIAG + 1,
+	QTM_OBP_MAX_OBJECT_NUM = QTM_OBJ_RESERVED4 + 1,
 };
 
 /* OBP structures as defined by the wire protocol. */
