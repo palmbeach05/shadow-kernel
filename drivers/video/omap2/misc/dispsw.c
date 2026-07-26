@@ -91,12 +91,6 @@ struct dispsw_device {
 
 	int num_ovls;
 
-	/*
-	 * Performance hack to turn off GFX plane for playback
-	 * played to an overridden device
-	 */
-	int videoOverrideEnabled;
-
 	/* Data, per overlay, for overriding the overlay set info call */
 	struct dispsw_osi osi[MAX_OVERLAYS];
 
@@ -121,30 +115,6 @@ static void dispsw_override_ovl(struct dispsw_osi *osi,
  *  the entire GFX plane 60 times per second for display controller HW
  *  composition.
  */
-static void dispsw_handle_gfx_disable(int ovl_id,
-					struct omap_overlay_info *info)
-{
-	prev = g_dev->videoOverrideEnabled;
-	g_dev->videoOverrideEnabled = 0;
-	for (i = 0; i < MAX_OVERLAYS; i++) {
-		osi = &g_dev->osi[i];
-		if (osi->ovl == NULL)
-			continue;
-		/* Save the GFX plane idx for below*/
-		else if (osi->id == OMAP_DSS_GFX)
-			gfx = i;
-	}
-	if (g_dev->videoOverrideEnabled != prev) {
-		osi = &g_dev->osi[gfx];
-		memcpy(&gfx_info, &osi->last_info, sizeof(gfx_info));
-		if (gfx_info.enabled && osi->override)
-			dispsw_override_ovl(osi, &gfx_info);
-		if (gfx_info.enabled && g_dev->videoOverrideEnabled)
-			gfx_info.enabled = false;
-		osi->set_func(osi->ovl, &gfx_info);
-	}
-}
-
 static int dispsw_convert_to_dss_rotation(enum dispsw_rotate rotate)
 {
 	int rot;
@@ -479,7 +449,7 @@ static void dispsw_override_ovl(struct dispsw_osi *osi,
 
 /* This function performs the substitute "set_overlay_info" operation
  */
-static int dispsw_ovl_set_info(struct omap_overlay *ovl,
+static int (struct omap_overlay *ovl,
 				struct omap_overlay_info *info)
 {
 	struct dispsw_osi *osi = NULL;
@@ -520,8 +490,6 @@ static int dispsw_ovl_set_info(struct omap_overlay *ovl,
 
 		if (info->enabled && osi->override)
 			dispsw_override_ovl(osi, info);
-
-		dispsw_handle_gfx_disable(osi->id, info);
 
 		rc = osi->set_func(ovl, info);
 	}
