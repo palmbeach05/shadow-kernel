@@ -84,7 +84,6 @@ static int omap_uart_con_id = -1;
 #ifdef CONFIG_SERIAL_OMAP
 static struct plat_serialomap_port serial_platform_data[] = {
 	{
-		.membase	= OMAP2_L4_IO_ADDRESS(OMAP_UART1_BASE),
 		.irq		= 72,
 		.regshift	= 2,
 #ifdef CONFIG_SERIAL_OMAP3430_HW_FLOW_CONTROL
@@ -93,7 +92,6 @@ static struct plat_serialomap_port serial_platform_data[] = {
 		.flags		= UPF_BOOT_AUTOCONF,
 	},
 	{
-		.membase	= OMAP2_L4_IO_ADDRESS(OMAP_UART2_BASE),
 		.irq		= 73,
 		.regshift	= 2,
 #ifdef CONFIG_SERIAL_OMAP3430_HW_FLOW_CONTROL
@@ -102,7 +100,6 @@ static struct plat_serialomap_port serial_platform_data[] = {
 		.flags		= UPF_BOOT_AUTOCONF,
 	},
 	{
-		.membase	= OMAP2_L4_IO_ADDRESS(OMAP_UART3_BASE),
 		.irq		= 74,
 		.regshift	= 2,
 #ifdef CONFIG_SERIAL_OMAP3430_HW_FLOW_CONTROL
@@ -756,9 +753,20 @@ void __init omap_serial_init(int wake_gpio_strobe,
 	for (i = 0; i < OMAP_MAX_NR_PORTS; i++) {
 		struct plat_serialomap_port *p = serial_platform_data + i;
 		struct omap_uart_state *uart = &omap_uart[i];
+		struct platform_device *pdev = uart_devices[i];
 
 		if (!(info->enabled_uarts & (1 << i))) {
 			p->disabled = 1;
+			continue;
+		}
+
+		/*
+		 * Dynamically map the physical memory region for the UART.
+		 * Module 4KB + L4 interconnected 4 KB. Persistent static mapping.
+		 */
+		p->membase = ioremap(pdev->resource[0].start, SZ_8K);
+		if (!p->membase) {
+			printk(KERN_ERR "ioremap failed for uart %d\n", i + 1);
 			continue;
 		}
 

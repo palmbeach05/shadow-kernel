@@ -211,6 +211,13 @@ void __init omap_init_irq(void)
 			continue;
 		}
 
+		/* Static mapping, never released */
+		bank->base_reg = ioremap(base, SZ_4K);
+		if (!bank->base_reg) {
+			printk(KERN_ERR "Could not ioremap irq bank%i\n", i);
+			continue;
+		}
+
 		omap_irq_bank_init_one(bank);
 
 		nr_of_irqs += bank->nr_irqs;
