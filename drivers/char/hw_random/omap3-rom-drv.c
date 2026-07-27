@@ -96,20 +96,26 @@ static int omap3_rom_get_random(void *buf, unsigned int count)
 
 static int omap3_rom_rng_data_present(struct hwrng *rng, int wait)
 {
-int i;
+	int i;
 
+	/* If the clock is already running, data is instantly available */
 	if (!rng_idle)
 		return 1;
 
-	for (i = 0; i < 20; i++) {
-		if (!wait)
-			break;
+	/* If we aren't allowed to block/wait, don't force a sleep */
+	if (!wait)
+		return 0;
 
+	/* 
+	 * Force a 200ms breathing window to stop the kernel thread from 
+	 * hammering the secure ROM API continuously when idle.
+	 */
+	for (i = 0; i < 20; i++) {
 		msleep(10);
-		if (!rng_idle)
-			return 1;
 	}
-	return 0;
+
+	/* Signal that we are ready to process a new read request */
+	return 1;
 }
 
 static int omap3_rom_rng_data_read(struct hwrng *rng, u32 *data)
