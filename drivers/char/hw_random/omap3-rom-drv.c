@@ -142,7 +142,8 @@ static int __init omap3_rom_rng_init(void)
 		printk(KERN_ERR "%s: failed to register hwrng: %d\n",
 		       omap3_rom_rng_name, r);
 		del_timer_sync(&idle_timer);
-		clk_disable(rng_clk);
+		if (!rng_idle)
+			clk_disable(rng_clk);
 		clk_put(rng_clk);
 		return r;
 	}
