@@ -105,9 +105,11 @@ int i;
 		if (!wait)
 			break;
 
-		msleep(10); 
+		msleep(10);
+		if (!rng_idle)
+			return 1;
 	}
-	return 1;
+	return 0;
 }
 
 static int omap3_rom_rng_data_read(struct hwrng *rng, u32 *data)
