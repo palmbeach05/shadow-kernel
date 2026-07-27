@@ -75,7 +75,13 @@ struct omap_uart_state {
 #endif
 };
 
-static struct omap_uart_state omap_uart[OMAP_MAX_NR_PORTS];
+#ifdef CONFIG_MACH_OMAP_ZOOM2
+#define OMAP_UART_COUNT 4
+#else
+#define OMAP_UART_COUNT 3
+#endif
+
+static struct omap_uart_state omap_uart[OMAP_UART_COUNT];
 static LIST_HEAD(uart_list);
 static unsigned int fifo_idleblks = 0;
 static int uart0_padconf = 0x180;
@@ -705,7 +711,7 @@ void __init omap_serial_early_init(void)
 	/* * Scan the bootargs (saved_command_line) for "ttyS0", "ttyS1", etc.
 	 * This pre-identifies the console so the driver doesn't have to guess.
 	 */
-	for (i = 0; i < OMAP_MAX_NR_PORTS; i++) {
+	for (i = 0; i < ARRAY_SIZE(omap_uart); i++) {
 		snprintf(name, sizeof(name), "ttyS%d", i);
 		if (strstr(saved_command_line, name)) {
 			omap_uart_con_id = i;
@@ -750,7 +756,7 @@ void __init omap_serial_init(int wake_gpio_strobe,
 	if (info == NULL)
 		return;
 
-	for (i = 0; i < OMAP_MAX_NR_PORTS; i++) {
+	for (i = 0; i < ARRAY_SIZE(omap_uart); i++) {
 		struct plat_serialomap_port *p = serial_platform_data + i;
 		struct omap_uart_state *uart = &omap_uart[i];
 		struct platform_device *pdev = uart_devices[i];
