@@ -88,7 +88,7 @@ static int omap3_rom_get_random(void *buf, unsigned int count)
 	ptr = virt_to_phys(buf);
 	r = call_sec_rom(SEC_HAL_RNG_GENERATE, 0, 0, 3, ptr,
 			 count, RNG_GEN_HW);
-	mod_timer(&idle_timer, jiffies + msecs_to_jiffies(500));
+	mod_timer(&idle_timer, jiffies + msecs_to_jiffies(50));
 	if (r != 0)
 		return -EINVAL;
 	return 0;
@@ -96,6 +96,17 @@ static int omap3_rom_get_random(void *buf, unsigned int count)
 
 static int omap3_rom_rng_data_present(struct hwrng *rng, int wait)
 {
+int i;
+
+	if (!rng_idle)
+		return 1;
+
+	for (i = 0; i < 20; i++) {
+		if (!wait)
+			break;
+
+		msleep(10); 
+	}
 	return 1;
 }
 
