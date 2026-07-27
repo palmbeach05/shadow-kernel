@@ -111,6 +111,8 @@ static struct hwrng omap3_rom_rng_ops = {
 
 static int __init omap3_rom_rng_init(void)
 {
+	int r;
+
 	printk(KERN_INFO "%s: initializing\n", omap3_rom_rng_name);
 	if (!cpu_is_omap34xx()) {
 		printk(KERN_ERR "%s: currently supports only OMAP34xx CPUs\n",
@@ -135,7 +137,17 @@ static int __init omap3_rom_rng_init(void)
 	clk_enable(rng_clk);
 	omap3_rom_idle_rng(0);
 
-	return hwrng_register(&omap3_rom_rng_ops);
+	r = hwrng_register(&omap3_rom_rng_ops);
+	if (r) {
+		printk(KERN_ERR "%s: failed to register hwrng: %d\n",
+		       omap3_rom_rng_name, r);
+		del_timer_sync(&idle_timer);
+		clk_disable(rng_clk);
+		clk_put(rng_clk);
+		return r;
+	}
+
+	return 0;
 }
 
 static void __exit omap3_rom_rng_exit(void)
