@@ -33,23 +33,23 @@ static int call_sec_rom(u32 appl_id, u32 proc_id, u32 flag, ...)
 	va_list ap;
 	u32 ret;
 	u32 val;
+	unsigned long flags;
 
 	va_start(ap, flag);
 	val = *(u32 *) &ap;
-	unsigned long flags;
-	
+
 	local_irq_save(flags);
 	local_fiq_disable();
 	ret = omap3_rng_call_rom_asm(appl_id, proc_id, flag,
-					     (u32) virt_to_phys((void *) val));
-	
+				     (u32) virt_to_phys((void *) val));
+
 	if (flags & PSR_F_BIT)
-	    local_fiq_disable();
+		local_fiq_disable();
 	else
-	    local_fiq_enable();
+		local_fiq_enable();
 	local_irq_restore(flags);
 	va_end(ap);
-	
+
 	return ret;
 }
 
