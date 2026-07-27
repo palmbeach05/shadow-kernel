@@ -154,7 +154,12 @@ static void __exit omap3_rom_rng_exit(void)
 {
 	hwrng_unregister(&omap3_rom_rng_ops);
 	del_timer_sync(&idle_timer);
-	clk_disable(rng_clk);
+	/* 
+	 * Only disable the clock if the driver isn't already idling.
+	 * If rng_idle == 1, omap3_rom_idle_rng already handled the disable.
+	 */
+	if (!rng_idle)
+		clk_disable(rng_clk);
 	clk_put(rng_clk);
 }
 
