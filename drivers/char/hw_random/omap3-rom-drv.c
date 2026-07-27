@@ -36,14 +36,20 @@ static int call_sec_rom(u32 appl_id, u32 proc_id, u32 flag, ...)
 
 	va_start(ap, flag);
 	val = *(u32 *) &ap;
-	local_irq_disable();
+	unsigned long flags;
+	
+	local_irq_save(flags);
 	local_fiq_disable();
 	ret = omap3_rng_call_rom_asm(appl_id, proc_id, flag,
-				     (u32) virt_to_phys((void *) val));
-	local_fiq_enable();
-	local_irq_enable();
+					     (u32) virt_to_phys((void *) val));
+	
+	if (flags & PSR_F_BIT)
+	    local_fiq_disable();
+	else
+	    local_fiq_enable();
+	local_irq_restore(flags);
 	va_end(ap);
-
+	
 	return ret;
 }
 
@@ -130,7 +136,7 @@ static int __init omap3_rom_rng_init(void)
 	if (IS_ERR(rng_clk)) {
 		printk(KERN_ERR "%s: unable to get RNG clock\n",
 		       omap3_rom_rng_name);
-		return IS_ERR(rng_clk);
+		return PTR_ERR(rng_clk);
 	}
 
 	/* Leave the RNG in reset state. */
@@ -155,7 +161,7 @@ static void __exit omap3_rom_rng_exit(void)
 {
 	hwrng_unregister(&omap3_rom_rng_ops);
 	del_timer_sync(&idle_timer);
-	/* 
+	/*
 	 * Only disable the clock if the driver isn't already idling.
 	 * If rng_idle == 1, omap3_rom_idle_rng already handled the disable.
 	 */
