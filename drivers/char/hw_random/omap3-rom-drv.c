@@ -4,6 +4,8 @@
  * Copyright (C) 2009 Nokia Corporation
  * Author: Juha Yrjola <juha.yrjola@solidboot.com>
  *
+ * Copyright (C) 2013 Pali Rohár <pali@kernel.org>
+ *
  * This file is licensed under  the terms of the GNU General Public
  * License version 2. This program is licensed "as is" without any
  * warranty of any kind, whether express or implied.
@@ -33,15 +35,21 @@ static int call_sec_rom(u32 appl_id, u32 proc_id, u32 flag, ...)
 	va_list ap;
 	u32 ret;
 	u32 val;
+	unsigned long flags;
 
 	va_start(ap, flag);
 	val = *(u32 *) &ap;
-	local_irq_disable();
+
+	local_irq_save(flags);
 	local_fiq_disable();
 	ret = omap3_rng_call_rom_asm(appl_id, proc_id, flag,
 				     (u32) virt_to_phys((void *) val));
-	local_fiq_enable();
-	local_irq_enable();
+
+	if (flags & PSR_F_BIT)
+		local_fiq_disable();
+	else
+		local_fiq_enable();
+	local_irq_restore(flags);
 	va_end(ap);
 
 	return ret;
@@ -88,15 +96,10 @@ static int omap3_rom_get_random(void *buf, unsigned int count)
 	ptr = virt_to_phys(buf);
 	r = call_sec_rom(SEC_HAL_RNG_GENERATE, 0, 0, 3, ptr,
 			 count, RNG_GEN_HW);
-	mod_timer(&idle_timer, jiffies + msecs_to_jiffies(500));
+	mod_timer(&idle_timer, jiffies + msecs_to_jiffies(50));
 	if (r != 0)
 		return -EINVAL;
 	return 0;
-}
-
-static int omap3_rom_rng_data_present(struct hwrng *rng, int wait)
-{
-	return 1;
 }
 
 static int omap3_rom_rng_data_read(struct hwrng *rng, u32 *data)
@@ -111,12 +114,13 @@ static int omap3_rom_rng_data_read(struct hwrng *rng, u32 *data)
 
 static struct hwrng omap3_rom_rng_ops = {
 	.name		= "omap3-rom",
-	.data_present	= omap3_rom_rng_data_present,
 	.data_read	= omap3_rom_rng_data_read,
 };
 
 static int __init omap3_rom_rng_init(void)
 {
+	int r;
+
 	printk(KERN_INFO "%s: initializing\n", omap3_rom_rng_name);
 	if (!cpu_is_omap34xx()) {
 		printk(KERN_ERR "%s: currently supports only OMAP34xx CPUs\n",
@@ -134,23 +138,44 @@ static int __init omap3_rom_rng_init(void)
 	if (IS_ERR(rng_clk)) {
 		printk(KERN_ERR "%s: unable to get RNG clock\n",
 		       omap3_rom_rng_name);
-		return IS_ERR(rng_clk);
+		return PTR_ERR(rng_clk);
 	}
 
 	/* Leave the RNG in reset state. */
 	clk_enable(rng_clk);
 	omap3_rom_idle_rng(0);
 
-	return hwrng_register(&omap3_rom_rng_ops);
+	r = hwrng_register(&omap3_rom_rng_ops);
+	if (r) {
+		printk(KERN_ERR "%s: failed to register hwrng: %d\n",
+		       omap3_rom_rng_name, r);
+		del_timer_sync(&idle_timer);
+		if (!rng_idle)
+			clk_disable(rng_clk);
+		clk_put(rng_clk);
+		return r;
+	}
+
+	return 0;
 }
 
 static void __exit omap3_rom_rng_exit(void)
 {
 	hwrng_unregister(&omap3_rom_rng_ops);
+	del_timer_sync(&idle_timer);
+	/*
+	 * Only disable the clock if the driver isn't already idling.
+	 * If rng_idle == 1, omap3_rom_idle_rng already handled the disable.
+	 */
+	if (!rng_idle)
+		clk_disable(rng_clk);
+	clk_put(rng_clk);
 }
 
 module_init(omap3_rom_rng_init);
 module_exit(omap3_rom_rng_exit);
 
+MODULE_ALIAS("platform:omap3-rom-rng");
 MODULE_AUTHOR("Juha Yrjola");
+MODULE_AUTHOR("Pali Rohár <pali@kernel.org>");
 MODULE_LICENSE("GPL");
