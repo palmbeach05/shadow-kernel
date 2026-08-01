@@ -24,6 +24,8 @@
 
 enum { ASYNC, SYNC };
 
+#define SIOPLUS_MS_TO_JIFFIES(ms) (((ms) * HZ + 999) / 1000)
+
 /* Tunables */
 static const int sync_read_expire = msecs_to_jiffies(25);	/* max time before a sync read is submitted. */
 static const int sync_write_expire = msecs_to_jiffies(250);	/* max time before a sync write is submitted. */
