@@ -27,11 +27,11 @@ enum { ASYNC, SYNC };
 #define SIOPLUS_MS_TO_JIFFIES(ms) (((ms) * HZ + 999) / 1000)
 
 /* Tunables */
-static const int sync_read_expire = msecs_to_jiffies(25);	/* max time before a sync read is submitted. */
-static const int sync_write_expire = msecs_to_jiffies(250);	/* max time before a sync write is submitted. */
+static const int sync_read_expire = SIOPLUS_MS_TO_JIFFIES(25);	/* max time before a sync read is submitted. */
+static const int sync_write_expire = SIOPLUS_MS_TO_JIFFIES(250);	/* max time before a sync write is submitted. */
 
-static const int async_read_expire = msecs_to_jiffies(50);	/* ditto for async, these limits are SOFT! */
-static const int async_write_expire = msecs_to_jiffies(500);	/* ditto for async, these limits are SOFT! */
+static const int async_read_expire = SIOPLUS_MS_TO_JIFFIES(50);	/* ditto for async, these limits are SOFT! */
+static const int async_write_expire = SIOPLUS_MS_TO_JIFFIES(500);	/* ditto for async, these limits are SOFT! */
 
 static const int writes_starved = 2;		/* max times reads can starve a write */
 static const int fifo_batch     = 16;		/* # of sequential requests treated as one
