@@ -4,7 +4,6 @@
  *
  * Copyright (C) 2012 Miguel Boton <mboton@gmail.com>
  *           (C) 2013, 2014 Boy Petersen <boypetersen@gmail.com>
- *.              2015 Linux 3.10 compatibility by Matthew Alex <matthewalex@outlook.com>
  *
  * This algorithm does not do any kind of sorting, as it is aimed for
  * aleatory access devices, but it does some basic merging. We try to
@@ -26,14 +25,14 @@
 enum { ASYNC, SYNC };
 
 /* Tunables */
-static const int sync_read_expire = (HZ / 16) * 5;	/* max time before a sync read is submitted. */
-static const int sync_write_expire = (HZ / 2) * 5;	/* max time before a sync write is submitted. */
+static const int sync_read_expire = msecs_to_jiffies(25);	/* max time before a sync read is submitted. */
+static const int sync_write_expire = msecs_to_jiffies(250);	/* max time before a sync write is submitted. */
 
-static const int async_read_expire = (HZ / 2);	/* ditto for async, these limits are SOFT! */
-static const int async_write_expire = (HZ * 2);	/* ditto for async, these limits are SOFT! */
+static const int async_read_expire = msecs_to_jiffies(50);	/* ditto for async, these limits are SOFT! */
+static const int async_write_expire = msecs_to_jiffies(500);	/* ditto for async, these limits are SOFT! */
 
 static const int writes_starved = 2;		/* max times reads can starve a write */
-static const int fifo_batch     = 1;		/* # of sequential requests treated as one
+static const int fifo_batch     = 16;		/* # of sequential requests treated as one
 						   by the above parameters. For throughput. */
 
 /* Elevator data */
