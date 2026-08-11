@@ -454,7 +454,14 @@ static int cpcap_batt_get_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_TEMP:
 	if (own_charger_enabled) {
-		val->intval = (cpcap_batt_value(sply, CPCAP_ADC_AD3)-273)*10;
+		/*
+		 * Without battd factory slope calculations, raw ADC AD3 over-reports
+		 * temperature by about 10-15 degrees Celsius. Subtract 150 tenths
+		 * of a degree (15 degrees Celsius) to align recovery readings with
+		 * true hardware thermistor range.
+		 */
+		int raw_temp = (cpcap_batt_value(sply, CPCAP_ADC_AD3)-273)*10;
+		val->intval = raw_temp - 150;
 	} else {
 		val->intval = sply->batt_state.batt_temp;
 	}
