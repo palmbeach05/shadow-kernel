@@ -50,7 +50,7 @@
 
 static int own_charger_enabled;
 static unsigned long sampling_rate;
-static u32 battery_old_cap = -1;
+static int battery_old_cap = -1;
 static long max_battery_level = 100;
 static struct workqueue_struct *wq;
 static struct delayed_work update_battery;
@@ -532,44 +532,50 @@ static int cpcap_batt_counter(struct cpcap_batt_ps *sply) {
 #ifdef BATTERY_DEBUG
 	printk("%s: batt_vol=%d\n",__func__, volt_batt);
 #endif
-	for (i=0; i < ARRAY_SIZE(tbl); i++) {
-		if (volt_batt <= 3500) {
-			cap = 0;
-			break;
-		}
-		if (volt_batt >= 4181) {
-			cap = 100;
-			break;
-		}
-		/* Let user decide */
-		if (tbl[i].capacity >= max_battery_level) {
-			cap = 100;
-			break;
-		}
-		if (volt_batt >= tbl[i].volt_batt) {
-			if (i == (ARRAY_SIZE(tbl)-1)) {
-				cap = 99;
-				break;
-			}
-			continue;
-	
+
+	/* 
+	* Without battd calibration in recovery, raw ADC BATTP reads ~175mV low 
+	 * relative to CPCAP charge table voltages. Apply offset under own_charger_enabled.
+	 */
+	if (own_charger_enabled) {
+			volt_batt += 300;
+
+	if (sply->usb_state.online || sply->ac_state.online)
+			volt_batt -= 60;
+
 	}
 
-                /* Prevent Percentage from going up again */
-		if (battery_old_cap  == -1) {
-			battery_old_cap = tbl[i].capacity;
-		} else if (battery_old_cap < tbl[i].capacity && 
-				(sply->usb_state.online == 1 || sply->ac_state.online == 1)) {
-			cap = battery_old_cap;
-#ifdef BATTERY_DEBUG
-			printk("if2: tbl[i].capacity %d,  battery_old_cap %d\n", tbl[i].capacity, battery_old_cap);
-#endif
-		} else { 
- 			battery_old_cap = tbl[i].capacity;
-			cap = battery_old_cap;
+	/* Boundary checks */
+	if (volt_batt <= 3500) {
+		cap = 0;
+	} else if (volt_batt >= 4180) {
+		cap = 100;
+	} else {
+		/* Search table for matching voltage */
+		for (i = 0; i < ARRAY_SIZE(tbl); i++) {
+			if (tbl[i].capacity >= max_battery_level) {
+				cap = 100;
+				break;
+			}
+			if (volt_batt <= tbl[i].volt_batt) {
+				cap = tbl[i].capacity;
+				break;
+			}
 		}
+	}
 
-	break;
+	/* Prevent capacity jumps from rising while unplugged (discharging) */
+	if (battery_old_cap == -1) {
+		battery_old_cap = cap;
+	} else if (cap > battery_old_cap && 
+		   !(sply->usb_state.online == 1 || sply->ac_state.online == 1)) {
+		/* Capacity went up, but we are NOT plugged in -> hold previous cap */
+		cap = battery_old_cap;
+#ifdef BATTERY_DEBUG
+		printk("%s: hold capacity at %d (raw cap was %d)\n", __func__, battery_old_cap, cap);
+#endif
+	} else {
+		battery_old_cap = cap;
 	}
 #ifdef BATTERY_DEBUG
 	printk("%s: capacity=%d\n",__func__,cap);
