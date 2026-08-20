@@ -556,26 +556,36 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		err = sysfs_create_link(&f->dev->kobj,
 					&common->luns[i].dev.kobj,
 					lun_name);
-		if (err) {
-			kfree(config);
-			return err;
-		}
+		if (err)
+			goto err_sysfs;
 
 		if (i == 0) {
-			(void)sysfs_create_link(&f->dev->kobj,
+			err = sysfs_create_link(&f->dev->kobj,
 						&common->luns[0].dev.kobj,
 						"lun");
+			if (err)
+				goto err_sysfs;
 		}
 	}
 
 	config->common = common;
 	f->config = config;
 	return 0;
+
+err_sysfs:
+	fsg_common_put(common);
+	kfree(config);
+	return err;
 }
 static void mass_storage_function_cleanup(struct android_usb_function *f)
 {
-	kfree(f->config);
-	f->config = NULL;
+	struct mass_storage_function_config *config = f->config;
+
+	if (config) {
+		fsg_common_put(config->common);
+		kfree(config);
+		f->config = NULL;
+	}
 }
 
 static int mass_storage_function_bind_config(struct android_usb_function *f,
