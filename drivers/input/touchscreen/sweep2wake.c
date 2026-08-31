@@ -78,6 +78,9 @@ static bool gesture_blocked;
 static unsigned int report_contacts;
 static int report_x, report_y;
 static bool report_contact_valid;
+static unsigned int diagnostic_gesture_id;
+static bool diagnostic_gesture_active;
+static bool diagnostic_power_queued;
 #ifndef CONFIG_HAS_EARLYSUSPEND
 static struct notifier_block s2w_lcd_notif;
 #endif
@@ -104,6 +107,8 @@ __setup("s2w=", read_s2w_cmdline);
 static void sweep2wake_presspwr(struct work_struct * sweep2wake_presspwr_work) {
 	if (!mutex_trylock(&pwrkeyworklock))
                 return;
+	pr_info(LOGTAG "diag id=%u power: emitting KEY_POWER\n",
+		diagnostic_gesture_id);
 	input_event(sweep2wake_pwrdev, EV_KEY, KEY_POWER, 1);
 	input_event(sweep2wake_pwrdev, EV_SYN, 0, 0);
 	msleep(S2W_PWRKEY_DUR);
@@ -117,6 +122,8 @@ static DECLARE_WORK(sweep2wake_presspwr_work, sweep2wake_presspwr);
 
 /* PowerKey trigger */
 static void sweep2wake_pwrtrigger(void) {
+	pr_info(LOGTAG "diag id=%u power: queued\n",
+		diagnostic_gesture_id);
 	schedule_work(&sweep2wake_presspwr_work);
         return;
 }
@@ -130,7 +137,6 @@ static void sweep2wake_reset(void) {
 
 static void sweep2wake_invalidate(void)
 {
-	pr_info(LOGTAG "gesture invalidated\n");
 	sweep2wake_reset();
 	gesture_blocked = true;
 }
@@ -196,6 +202,9 @@ static void detect_sweep2wake(int x, int y)
 	pr_info(LOGTAG"x,y(%4d,%4d)\n", x, y);
 #endif
 	if (x < x_min || x > x_max || y < y_min || y > y_max) {
+		pr_info(LOGTAG "diag id=%u reject: out-of-bounds x=%d y=%d "
+			"x-range=%d..%d y-range=%d..%d\n",
+			diagnostic_gesture_id, x, y, x_min, x_max, y_min, y_max);
 		sweep2wake_invalidate();
 		return;
 	}
@@ -212,30 +221,41 @@ static void detect_sweep2wake(int x, int y)
 	minimum_displacement = (x_max - x_min) *
 		S2W_MIN_DISPLACEMENT_PERCENT / 100;
 
-	pr_info(LOGTAG "gesture: start=%d x=%d y=%d progress=%d required=%d "
-		"suspended=%d enabled=%d blocked=%d exec=%d\n",
-		gesture_start_x, x, y, gesture_max_progress, minimum_displacement,
-		scr_suspended, s2w_switch, gesture_blocked, exec_count);
+	pr_info(LOGTAG "diag id=%u progress: start=%d x=%d y=%d "
+		"current=%d max=%d required=%d suspended=%d enabled=%d "
+		"s2sonly=%d blocked=%d exec=%d\n",
+		diagnostic_gesture_id, gesture_start_x, x, y, displacement,
+		gesture_max_progress, minimum_displacement, scr_suspended,
+		s2w_switch, s2w_s2sonly, gesture_blocked, exec_count);
 
 	//left->right
 	if (scr_suspended && s2w_switch > 0 && !s2w_s2sonly) {
 		if (gesture_max_progress >= minimum_displacement && exec_count) {
 			pr_info(LOGTAG"wake gesture: emitting KEY_POWER\n");
+			diagnostic_power_queued = true;
 			sweep2wake_pwrtrigger();
 			exec_count = false;
 		}
 	//right->left
 	} else if (!scr_suspended && s2w_switch > 0) {
 		if (y <= y_limit) {
+			pr_info(LOGTAG "diag id=%u reject: sleep-gesture y=%d "
+				"y-limit=%d\n",
+				diagnostic_gesture_id, y, y_limit);
 			sweep2wake_invalidate();
 			return;
 		}
 		if (gesture_max_progress >= minimum_displacement && exec_count) {
 			pr_info(LOGTAG"sleep gesture: emitting KEY_POWER\n");
+			diagnostic_power_queued = true;
 			sweep2wake_pwrtrigger();
 			exec_count = false;
 		}
 	} else {
+		pr_info(LOGTAG "diag id=%u reject: unsupported-state "
+			"suspended=%d enabled=%d s2sonly=%d\n",
+			diagnostic_gesture_id, scr_suspended, s2w_switch,
+			s2w_s2sonly);
 		sweep2wake_invalidate();
 	}
 }
@@ -293,22 +313,45 @@ static void s2w_input_event(struct input_handle *handle, unsigned int type,
 		}
 		s2w_reset_contact_packet();
 	} else if (code == SYN_REPORT) {
-		pr_info(LOGTAG "frame: contacts=%u valid=%d blocked=%d active=%d "
-			"suspended=%d x=%d y=%d\n",
-			report_contacts, report_contact_valid, gesture_blocked,
-			contact_active, scr_suspended, report_x, report_y);
+		if (report_contacts == 1 && !contact_active) {
+			diagnostic_gesture_id++;
+			diagnostic_gesture_active = true;
+			diagnostic_power_queued = false;
+			pr_info(LOGTAG "diag id=%u begin: valid=%d blocked=%d "
+				"suspended=%d x=%d y=%d\n",
+				diagnostic_gesture_id, report_contact_valid,
+				gesture_blocked, scr_suspended, report_x, report_y);
+		}
 
 		if (report_contacts == 1) {
 			contact_active = true;
-			if (report_contact_valid && !gesture_blocked)
+			if (report_contact_valid && !gesture_blocked) {
 				detect_sweep2wake(report_x, report_y);
+			} else {
+				pr_info(LOGTAG "diag id=%u skip: valid=%d blocked=%d "
+					"suspended=%d x=%d y=%d\n",
+					diagnostic_gesture_id, report_contact_valid,
+					gesture_blocked, scr_suspended, report_x,
+					report_y);
+			}
 		} else if (report_contacts > 1) {
 			contact_active = true;
+			pr_info(LOGTAG "diag id=%u reject: contacts=%u\n",
+				diagnostic_gesture_id, report_contacts);
 			sweep2wake_invalidate();
 		} else {
+			if (diagnostic_gesture_active) {
+				pr_info(LOGTAG "diag id=%u end: start-valid=%d "
+					"max-progress=%d blocked=%d suspended=%d "
+					"power-queued=%d\n",
+					diagnostic_gesture_id, gesture_start_valid,
+					gesture_max_progress, gesture_blocked,
+					scr_suspended, diagnostic_power_queued);
+			}
 			sweep2wake_reset();
 			gesture_blocked = false;
 			s2w_reset_contact_state();
+			diagnostic_gesture_active = false;
 		}
 
 		report_contacts = 0;
