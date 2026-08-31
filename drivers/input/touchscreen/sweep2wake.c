@@ -130,6 +130,7 @@ static void sweep2wake_reset(void) {
 
 static void sweep2wake_invalidate(void)
 {
+	pr_info(LOGTAG "gesture invalidated\n");
 	sweep2wake_reset();
 	gesture_blocked = true;
 }
@@ -211,6 +212,11 @@ static void detect_sweep2wake(int x, int y)
 	minimum_displacement = (x_max - x_min) *
 		S2W_MIN_DISPLACEMENT_PERCENT / 100;
 
+	pr_info(LOGTAG "gesture: start=%d x=%d y=%d progress=%d required=%d "
+		"suspended=%d enabled=%d blocked=%d exec=%d\n",
+		gesture_start_x, x, y, gesture_max_progress, minimum_displacement,
+		scr_suspended, s2w_switch, gesture_blocked, exec_count);
+
 	//left->right
 	if (scr_suspended && s2w_switch > 0 && !s2w_s2sonly) {
 		if (gesture_max_progress >= minimum_displacement && exec_count) {
@@ -287,6 +293,11 @@ static void s2w_input_event(struct input_handle *handle, unsigned int type,
 		}
 		s2w_reset_contact_packet();
 	} else if (code == SYN_REPORT) {
+		pr_info(LOGTAG "frame: contacts=%u valid=%d blocked=%d active=%d "
+			"suspended=%d x=%d y=%d\n",
+			report_contacts, report_contact_valid, gesture_blocked,
+			contact_active, scr_suspended, report_x, report_y);
+
 		if (report_contacts == 1) {
 			contact_active = true;
 			if (report_contact_valid && !gesture_blocked)
