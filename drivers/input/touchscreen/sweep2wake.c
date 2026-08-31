@@ -70,8 +70,8 @@ static bool tracking_id_called, active_tracking_id_valid;
 static bool scr_suspended = false, exec_count = true;
 static int x_min, x_max, y_min, y_max;
 static int x_final, y_limit;
-static int gesture_start_x, last_x;
-static bool gesture_start_valid, last_x_valid;
+static int gesture_start_x;
+static bool gesture_start_valid;
 static bool gesture_blocked;
 static unsigned int report_contacts;
 static int report_x, report_y;
@@ -123,7 +123,6 @@ static void sweep2wake_pwrtrigger(void) {
 static void sweep2wake_reset(void) {
 	exec_count = true;
 	gesture_start_valid = false;
-	last_x_valid = false;
 }
 
 static void sweep2wake_invalidate(void)
@@ -201,13 +200,6 @@ static void detect_sweep2wake(int x, int y)
 		gesture_start_valid = true;
 	}
 
-	if (last_x_valid &&
-	    ((scr_suspended && x < last_x) || (!scr_suspended && x > last_x))) {
-		sweep2wake_invalidate();
-		return;
-	}
-	last_x = x;
-	last_x_valid = true;
 	displacement = scr_suspended ? x - gesture_start_x :
 		gesture_start_x - x;
 
