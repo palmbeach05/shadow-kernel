@@ -56,27 +56,32 @@ MODULE_LICENSE("GPLv2");
 #define S2W_S2SONLY_DEFAULT	0
 #define S2W_PWRKEY_DUR          60
 
-/* defaults */
-#define S2W_Y_MAX               1020
-#define S2W_X_MAX               1024
-#define S2W_Y_LIMIT             S2W_Y_MAX-130
-#define S2W_X_B1                300
-#define S2W_X_B2                600
-#define S2W_X_FINAL             200
-
 /* Resources */
 int s2w_switch = S2W_DEFAULT, s2w_s2sonly = S2W_S2SONLY_DEFAULT;
 static int touch_x = 0, touch_y = 0;
+static int packet_x, packet_y;
+static bool touch_x_valid, touch_y_valid;
 static bool touch_x_called = false, touch_y_called = false;
+static bool contact_called, contact_active, empty_contact_report;
+static int touch_major;
+static bool touch_major_called;
+static int tracking_id, active_tracking_id;
+static bool tracking_id_called, active_tracking_id_valid;
 static bool scr_suspended = false, exec_count = true;
 static bool scr_on_touch = false, barrier[2] = {false, false};
+static int x_min, x_max, y_min, y_max;
+static int x_barrier_one, x_barrier_two, x_final, y_limit;
+static int last_x;
+static bool last_x_valid;
+static bool gesture_blocked;
+static unsigned int report_contacts;
+static int report_x, report_y;
+static bool report_contact_valid;
 #ifndef CONFIG_HAS_EARLYSUSPEND
 static struct notifier_block s2w_lcd_notif;
 #endif
 static struct input_dev * sweep2wake_pwrdev;
 static DEFINE_MUTEX(pwrkeyworklock);
-static struct workqueue_struct *s2w_input_wq;
-static struct work_struct s2w_input_work;
 
 /* Read cmdline for s2w */
 static int __init read_s2w_cmdline(char *s2w)
@@ -121,37 +126,95 @@ static void sweep2wake_reset(void) {
 	barrier[0] = false;
 	barrier[1] = false;
 	scr_on_touch = false;
+	last_x_valid = false;
+}
+
+static void sweep2wake_invalidate(void)
+{
+	sweep2wake_reset();
+	gesture_blocked = true;
+}
+
+static void s2w_reset_contact_state(void)
+{
+	touch_x_valid = false;
+	touch_y_valid = false;
+	contact_active = false;
+	active_tracking_id_valid = false;
+}
+
+static void s2w_reset_contact_packet(void)
+{
+	touch_x_called = false;
+	touch_y_called = false;
+	contact_called = false;
+	touch_major_called = false;
+	tracking_id_called = false;
+}
+
+static void s2w_record_cached_contact(void)
+{
+	report_contacts++;
+	if (report_contacts == 1 && touch_x_valid && touch_y_valid) {
+		report_x = touch_x;
+		report_y = touch_y;
+		report_contact_valid = true;
+	}
+}
+
+static void s2w_record_contact(bool has_tracking_id)
+{
+	if (has_tracking_id && tracking_id_called) {
+		if (!active_tracking_id_valid ||
+		    tracking_id != active_tracking_id) {
+			touch_x_valid = false;
+			touch_y_valid = false;
+		}
+		active_tracking_id = tracking_id;
+		active_tracking_id_valid = true;
+	}
+
+	if (touch_x_called) {
+		touch_x = packet_x;
+		touch_x_valid = true;
+	}
+	if (touch_y_called) {
+		touch_y = packet_y;
+		touch_y_valid = true;
+	}
+
+	s2w_record_cached_contact();
 }
 
 /* Sweep2wake main function */
-static void detect_sweep2wake(int x, int y, bool st)
+static void detect_sweep2wake(int x, int y)
 {
-        int prevx = 0, nextx = 0;
-        bool single_touch = st;
 #if S2W_DEBUG
-        pr_info(LOGTAG"x,y(%4d,%4d) single:%s\n",
-                x, y, (single_touch) ? "true" : "false");
+	pr_info(LOGTAG"x,y(%4d,%4d)\n", x, y);
 #endif
+	if (x < x_min || x > x_max || y < y_min || y > y_max) {
+		sweep2wake_invalidate();
+		return;
+	}
+
+	if (last_x_valid &&
+	    ((scr_suspended && x < last_x) || (!scr_suspended && x > last_x))) {
+		sweep2wake_invalidate();
+		return;
+	}
+	last_x = x;
+	last_x_valid = true;
+
 	//left->right
-	if ((single_touch) && (scr_suspended == true) && (s2w_switch > 0)) {
-		prevx = 0;
-		nextx = S2W_X_B1;
+	if (scr_suspended && s2w_switch > 0 && !s2w_s2sonly) {
 		if ((barrier[0] == true) ||
-		   ((x > prevx) &&
-		    (x < nextx) &&
-		    (y > 0))) {
-			prevx = nextx;
-			nextx = S2W_X_B2;
+		   (x >= x_min && x < x_barrier_one)) {
 			barrier[0] = true;
 			if ((barrier[1] == true) ||
-			   ((x > prevx) &&
-			    (x < nextx) &&
-			    (y > 0))) {
-				prevx = nextx;
+			   (x >= x_barrier_one && x < x_barrier_two)) {
 				barrier[1] = true;
-				if ((x > prevx) &&
-				    (y > 0)) {
-					if (x > (S2W_X_MAX - S2W_X_FINAL)) {
+				if (x >= x_barrier_two) {
+					if (x > (x_max - x_final)) {
 						if (exec_count) {
 							pr_info(LOGTAG"ON\n");
 							sweep2wake_pwrtrigger();
@@ -162,26 +225,20 @@ static void detect_sweep2wake(int x, int y, bool st)
 			}
 		}
 	//right->left
-	} else if ((single_touch) && (scr_suspended == false) && (s2w_switch > 0)) {
+	} else if (!scr_suspended && s2w_switch > 0) {
+		if (y <= y_limit) {
+			sweep2wake_invalidate();
+			return;
+		}
 		scr_on_touch=true;
-		prevx = (S2W_X_MAX - S2W_X_FINAL);
-		nextx = S2W_X_B2;
 		if ((barrier[0] == true) ||
-		   ((x < prevx) &&
-		    (x > nextx) &&
-		    (y > S2W_Y_LIMIT))) {
-			prevx = nextx;
-			nextx = S2W_X_B1;
+		   (x < (x_max - x_final) && x > x_barrier_two)) {
 			barrier[0] = true;
 			if ((barrier[1] == true) ||
-			   ((x < prevx) &&
-			    (x > nextx) &&
-			    (y > S2W_Y_LIMIT))) {
-				prevx = nextx;
+			   (x <= x_barrier_two && x > x_barrier_one)) {
 				barrier[1] = true;
-				if ((x < prevx) &&
-				    (y > S2W_Y_LIMIT)) {
-					if (x < S2W_X_FINAL) {
+				if (x <= x_barrier_one) {
+					if (x < (x_min + x_final)) {
 						if (exec_count) {
 							pr_info(LOGTAG"OFF\n");
 							sweep2wake_pwrtrigger();
@@ -191,18 +248,16 @@ static void detect_sweep2wake(int x, int y, bool st)
 				}
 			}
 		}
+	} else {
+		sweep2wake_invalidate();
 	}
-}
-
-static void s2w_input_callback(struct work_struct *unused) {
-
-	detect_sweep2wake(touch_x, touch_y, true);
-
-	return;
 }
 
 static void s2w_input_event(struct input_handle *handle, unsigned int type,
 				unsigned int code, int value) {
+	bool has_tracking_id;
+	bool packet_is_contact;
+
 #if S2W_DEBUG
 	pr_info("sweep2wake: code: %s|%u, val: %i\n",
 		((code==ABS_MT_POSITION_X) ? "X" :
@@ -210,34 +265,69 @@ static void s2w_input_event(struct input_handle *handle, unsigned int type,
 		(code==ABS_MT_TRACKING_ID) ? "ID" :
 		"undef"), code, value);
 #endif
-	if (code == ABS_MT_TRACKING_ID && value == -1) {
-		sweep2wake_reset();
+	if (type == EV_ABS) {
+		contact_called = true;
+		if (code == ABS_MT_POSITION_X) {
+			packet_x = value;
+			touch_x_called = true;
+		} else if (code == ABS_MT_POSITION_Y) {
+			packet_y = value;
+			touch_y_called = true;
+		} else if (code == ABS_MT_TOUCH_MAJOR) {
+			touch_major = value;
+			touch_major_called = true;
+		} else if (code == ABS_MT_TRACKING_ID) {
+			tracking_id = value;
+			tracking_id_called = true;
+		}
 		return;
 	}
 
-	if (code == ABS_MT_POSITION_X) {
-		touch_x = value;
-		touch_x_called = true;
-	}
+	if (type != EV_SYN)
+		return;
 
-	if (code == ABS_MT_POSITION_Y) {
-		touch_y = value;
-		touch_y_called = true;
-	}
+	if (code == SYN_MT_REPORT) {
+		has_tracking_id = test_bit(ABS_MT_TRACKING_ID,
+					   handle->dev->absbit);
+		packet_is_contact = contact_called;
+		if (touch_major_called && !touch_major)
+			packet_is_contact = false;
+		if (has_tracking_id && tracking_id_called && tracking_id < 0)
+			packet_is_contact = false;
 
-	if (touch_x_called && touch_y_called) {
-		touch_x_called = false;
-		touch_y_called = false;
-		queue_work_on(0, s2w_input_wq, &s2w_input_work);
+		if (packet_is_contact) {
+			if (empty_contact_report) {
+				s2w_record_cached_contact();
+				empty_contact_report = false;
+			}
+			s2w_record_contact(has_tracking_id);
+		} else if (contact_active) {
+			empty_contact_report = true;
+		}
+		s2w_reset_contact_packet();
+	} else if (code == SYN_REPORT) {
+		if (report_contacts == 1) {
+			contact_active = true;
+			if (report_contact_valid && !gesture_blocked)
+				detect_sweep2wake(report_x, report_y);
+		} else if (report_contacts > 1) {
+			contact_active = true;
+			sweep2wake_invalidate();
+		} else {
+			sweep2wake_reset();
+			gesture_blocked = false;
+			s2w_reset_contact_state();
+		}
+
+		report_contacts = 0;
+		report_contact_valid = false;
+		empty_contact_report = false;
+		s2w_reset_contact_packet();
 	}
 }
 
 static int input_dev_filter(struct input_dev *dev) {
-	if (strstr(dev->name, "touch")) {
-		return 0;
-	} else {
-		return 1;
-	}
+	return !dev->name || strcmp(dev->name, "qtouch-touchscreen");
 }
 
 static int s2w_input_connect(struct input_handler *handler,
@@ -247,6 +337,25 @@ static int s2w_input_connect(struct input_handler *handler,
 
 	if (input_dev_filter(dev))
 		return -ENODEV;
+
+	x_min = dev->absmin[ABS_MT_POSITION_X];
+	x_max = dev->absmax[ABS_MT_POSITION_X];
+	y_min = dev->absmin[ABS_MT_POSITION_Y];
+	y_max = dev->absmax[ABS_MT_POSITION_Y];
+	if (x_max <= x_min || y_max <= y_min)
+		return -ENODEV;
+
+	x_barrier_one = x_min + ((x_max - x_min) * 3 / 10);
+	x_barrier_two = x_min + ((x_max - x_min) * 6 / 10);
+	x_final = (x_max - x_min) / 5;
+	y_limit = y_max - ((y_max - y_min) * 13 / 100);
+	sweep2wake_reset();
+	gesture_blocked = false;
+	s2w_reset_contact_state();
+	s2w_reset_contact_packet();
+	report_contacts = 0;
+	report_contact_valid = false;
+	empty_contact_report = false;
 
 	handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
 	if (!handle)
@@ -273,6 +382,12 @@ err2:
 }
 
 static void s2w_input_disconnect(struct input_handle *handle) {
+	sweep2wake_invalidate();
+	s2w_reset_contact_state();
+	s2w_reset_contact_packet();
+	report_contacts = 0;
+	report_contact_valid = false;
+	empty_contact_report = false;
 	input_close_device(handle);
 	input_unregister_handle(handle);
 	kfree(handle);
@@ -298,9 +413,11 @@ static int lcd_notifier_callback(struct notifier_block *this,
 	switch (event) {
 	case LCD_EVENT_ON_END:
 		scr_suspended = false;
+		sweep2wake_invalidate();
 		break;
 	case LCD_EVENT_OFF_END:
 		scr_suspended = true;
+		sweep2wake_invalidate();
 		break;
 	default:
 		break;
@@ -311,13 +428,14 @@ static int lcd_notifier_callback(struct notifier_block *this,
 #else
 static void s2w_early_suspend(struct early_suspend *h) {
 	scr_suspended = true;
+	sweep2wake_invalidate();
 }
 
 static void s2w_late_resume(struct early_suspend *h) {
 	scr_suspended = false;
 	
 	/* The execution stopped, it should be save to reset the hole thing */
-	sweep2wake_reset();
+	sweep2wake_invalidate();
 }
 
 static struct early_suspend s2w_early_suspend_handler = {
@@ -343,9 +461,11 @@ static ssize_t s2w_sweep2wake_show(struct device *dev,
 static ssize_t s2w_sweep2wake_dump(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	if (buf[0] >= '0' && buf[0] <= '1' && buf[1] == '\n')
-                if (s2w_switch != buf[0] - '0')
-		        s2w_switch = buf[0] - '0';
+	if (buf[0] >= '0' && buf[0] <= '1' && buf[1] == '\n' &&
+	    s2w_switch != buf[0] - '0') {
+		s2w_switch = buf[0] - '0';
+		sweep2wake_invalidate();
+	}
 
 	return count;
 }
@@ -366,9 +486,11 @@ static ssize_t s2w_s2w_s2sonly_show(struct device *dev,
 static ssize_t s2w_s2w_s2sonly_dump(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	if (buf[0] >= '0' && buf[0] <= '1' && buf[1] == '\n')
-                if (s2w_s2sonly != buf[0] - '0')
-		        s2w_s2sonly = buf[0] - '0';
+	if (buf[0] >= '0' && buf[0] <= '1' && buf[1] == '\n' &&
+	    s2w_s2sonly != buf[0] - '0') {
+		s2w_s2sonly = buf[0] - '0';
+		sweep2wake_invalidate();
+	}
 
 	return count;
 }
@@ -421,15 +543,9 @@ static int __init sweep2wake_init(void)
 	rc = input_register_device(sweep2wake_pwrdev);
 	if (rc) {
 		pr_err("%s: input_register_device err=%d\n", __func__, rc);
-		goto err_input_dev;
+		goto err_free_input_dev;
 	}
 
-	s2w_input_wq = create_workqueue("s2wiwq");
-	if (!s2w_input_wq) {
-		pr_err("%s: Failed to create s2wiwq workqueue\n", __func__);
-		return -EFAULT;
-	}
-	INIT_WORK(&s2w_input_work, s2w_input_callback);
 	rc = input_register_handler(&s2w_input_handler);
 	if (rc)
 		pr_err("%s: Failed to register s2w_input_handler\n", __func__);
@@ -462,12 +578,14 @@ static int __init sweep2wake_init(void)
 		printk("%s: sysfs_create_file failed for sweep2wake_version\n", __func__);
 	}
 
-err_input_dev:
+	return 0;
+
+err_free_input_dev:
 	input_free_device(sweep2wake_pwrdev);
 err_alloc_dev:
 	pr_info(LOGTAG"%s done\n", __func__);
 
-	return 0;
+	return rc;
 }
 
 static void __exit sweep2wake_exit(void)
@@ -479,9 +597,7 @@ static void __exit sweep2wake_exit(void)
 	lcd_unregister_client(&s2w_lcd_notif);
 #endif
 	input_unregister_handler(&s2w_input_handler);
-	destroy_workqueue(s2w_input_wq);
 	input_unregister_device(sweep2wake_pwrdev);
-	input_free_device(sweep2wake_pwrdev);
 	return;
 }
 
