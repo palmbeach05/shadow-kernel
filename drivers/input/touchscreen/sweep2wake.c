@@ -55,6 +55,7 @@ MODULE_LICENSE("GPLv2");
 #define S2W_DEFAULT		0
 #define S2W_S2SONLY_DEFAULT	0
 #define S2W_PWRKEY_DUR          60
+#define S2W_MIN_DISPLACEMENT_PERCENT 60
 
 /* Resources */
 int s2w_switch = S2W_DEFAULT, s2w_s2sonly = S2W_S2SONLY_DEFAULT;
@@ -69,8 +70,9 @@ static int tracking_id, active_tracking_id;
 static bool tracking_id_called, active_tracking_id_valid;
 static bool scr_suspended = false, exec_count = true;
 static int x_min, x_max, y_min, y_max;
-static int x_final, y_limit;
+static int y_limit;
 static int gesture_start_x;
+static int gesture_max_progress;
 static bool gesture_start_valid;
 static bool gesture_blocked;
 static unsigned int report_contacts;
@@ -123,6 +125,7 @@ static void sweep2wake_pwrtrigger(void) {
 static void sweep2wake_reset(void) {
 	exec_count = true;
 	gesture_start_valid = false;
+	gesture_max_progress = 0;
 }
 
 static void sweep2wake_invalidate(void)
@@ -186,6 +189,7 @@ static void s2w_record_contact(bool has_tracking_id)
 static void detect_sweep2wake(int x, int y)
 {
 	int displacement;
+	int minimum_displacement;
 
 #if S2W_DEBUG
 	pr_info(LOGTAG"x,y(%4d,%4d)\n", x, y);
@@ -202,15 +206,14 @@ static void detect_sweep2wake(int x, int y)
 
 	displacement = scr_suspended ? x - gesture_start_x :
 		gesture_start_x - x;
+	if (displacement > gesture_max_progress)
+		gesture_max_progress = displacement;
+	minimum_displacement = (x_max - x_min) *
+		S2W_MIN_DISPLACEMENT_PERCENT / 100;
 
 	//left->right
 	if (scr_suspended && s2w_switch > 0 && !s2w_s2sonly) {
-		if (gesture_start_x >= x_min + x_final) {
-			sweep2wake_invalidate();
-			return;
-		}
-		if (x > x_max - x_final && displacement >= x_max - x_min -
-						      (2 * x_final) && exec_count) {
+		if (gesture_max_progress >= minimum_displacement && exec_count) {
 			pr_info(LOGTAG"wake gesture: emitting KEY_POWER\n");
 			sweep2wake_pwrtrigger();
 			exec_count = false;
@@ -221,12 +224,7 @@ static void detect_sweep2wake(int x, int y)
 			sweep2wake_invalidate();
 			return;
 		}
-		if (gesture_start_x <= x_max - x_final) {
-			sweep2wake_invalidate();
-			return;
-		}
-		if (x < x_min + x_final && displacement >= x_max - x_min -
-						      (2 * x_final) && exec_count) {
+		if (gesture_max_progress >= minimum_displacement && exec_count) {
 			pr_info(LOGTAG"sleep gesture: emitting KEY_POWER\n");
 			sweep2wake_pwrtrigger();
 			exec_count = false;
@@ -328,7 +326,6 @@ static int s2w_input_connect(struct input_handler *handler,
 	if (x_max <= x_min || y_max <= y_min)
 		return -ENODEV;
 
-	x_final = (x_max - x_min) / 5;
 	y_limit = y_max - ((y_max - y_min) * 13 / 100);
 	sweep2wake_reset();
 	gesture_blocked = false;
