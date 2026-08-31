@@ -68,11 +68,10 @@ static bool touch_major_called;
 static int tracking_id, active_tracking_id;
 static bool tracking_id_called, active_tracking_id_valid;
 static bool scr_suspended = false, exec_count = true;
-static bool scr_on_touch = false, barrier[2] = {false, false};
 static int x_min, x_max, y_min, y_max;
-static int x_barrier_one, x_barrier_two, x_final, y_limit;
-static int last_x;
-static bool last_x_valid;
+static int x_final, y_limit;
+static int gesture_start_x, last_x;
+static bool gesture_start_valid, last_x_valid;
 static bool gesture_blocked;
 static unsigned int report_contacts;
 static int report_x, report_y;
@@ -123,9 +122,7 @@ static void sweep2wake_pwrtrigger(void) {
 /* reset on finger release */
 static void sweep2wake_reset(void) {
 	exec_count = true;
-	barrier[0] = false;
-	barrier[1] = false;
-	scr_on_touch = false;
+	gesture_start_valid = false;
 	last_x_valid = false;
 }
 
@@ -189,12 +186,19 @@ static void s2w_record_contact(bool has_tracking_id)
 /* Sweep2wake main function */
 static void detect_sweep2wake(int x, int y)
 {
+	int displacement;
+
 #if S2W_DEBUG
 	pr_info(LOGTAG"x,y(%4d,%4d)\n", x, y);
 #endif
 	if (x < x_min || x > x_max || y < y_min || y > y_max) {
 		sweep2wake_invalidate();
 		return;
+	}
+
+	if (!gesture_start_valid) {
+		gesture_start_x = x;
+		gesture_start_valid = true;
 	}
 
 	if (last_x_valid &&
@@ -204,25 +208,20 @@ static void detect_sweep2wake(int x, int y)
 	}
 	last_x = x;
 	last_x_valid = true;
+	displacement = scr_suspended ? x - gesture_start_x :
+		gesture_start_x - x;
 
 	//left->right
 	if (scr_suspended && s2w_switch > 0 && !s2w_s2sonly) {
-		if ((barrier[0] == true) ||
-		   (x >= x_min && x < x_barrier_one)) {
-			barrier[0] = true;
-			if ((barrier[1] == true) ||
-			   (x >= x_barrier_one && x < x_barrier_two)) {
-				barrier[1] = true;
-				if (x >= x_barrier_two) {
-					if (x > (x_max - x_final)) {
-						if (exec_count) {
-							pr_info(LOGTAG"ON\n");
-							sweep2wake_pwrtrigger();
-							exec_count = false;
-						}
-					}
-				}
-			}
+		if (gesture_start_x >= x_min + x_final) {
+			sweep2wake_invalidate();
+			return;
+		}
+		if (x > x_max - x_final && displacement >= x_max - x_min -
+						      (2 * x_final) && exec_count) {
+			pr_info(LOGTAG"wake gesture: emitting KEY_POWER\n");
+			sweep2wake_pwrtrigger();
+			exec_count = false;
 		}
 	//right->left
 	} else if (!scr_suspended && s2w_switch > 0) {
@@ -230,23 +229,15 @@ static void detect_sweep2wake(int x, int y)
 			sweep2wake_invalidate();
 			return;
 		}
-		scr_on_touch=true;
-		if ((barrier[0] == true) ||
-		   (x < (x_max - x_final) && x > x_barrier_two)) {
-			barrier[0] = true;
-			if ((barrier[1] == true) ||
-			   (x <= x_barrier_two && x > x_barrier_one)) {
-				barrier[1] = true;
-				if (x <= x_barrier_one) {
-					if (x < (x_min + x_final)) {
-						if (exec_count) {
-							pr_info(LOGTAG"OFF\n");
-							sweep2wake_pwrtrigger();
-							exec_count = false;
-						}
-					}
-				}
-			}
+		if (gesture_start_x <= x_max - x_final) {
+			sweep2wake_invalidate();
+			return;
+		}
+		if (x < x_min + x_final && displacement >= x_max - x_min -
+						      (2 * x_final) && exec_count) {
+			pr_info(LOGTAG"sleep gesture: emitting KEY_POWER\n");
+			sweep2wake_pwrtrigger();
+			exec_count = false;
 		}
 	} else {
 		sweep2wake_invalidate();
@@ -345,8 +336,6 @@ static int s2w_input_connect(struct input_handler *handler,
 	if (x_max <= x_min || y_max <= y_min)
 		return -ENODEV;
 
-	x_barrier_one = x_min + ((x_max - x_min) * 3 / 10);
-	x_barrier_two = x_min + ((x_max - x_min) * 6 / 10);
 	x_final = (x_max - x_min) / 5;
 	y_limit = y_max - ((y_max - y_min) * 13 / 100);
 	sweep2wake_reset();
@@ -373,6 +362,7 @@ static int s2w_input_connect(struct input_handler *handler,
 	if (error)
 		goto err1;
 
+	pr_info(LOGTAG"attached to %s\n", dev->name);
 	return 0;
 err1:
 	input_unregister_handle(handle);
@@ -543,7 +533,7 @@ static int __init sweep2wake_init(void)
 	rc = input_register_device(sweep2wake_pwrdev);
 	if (rc) {
 		pr_err("%s: input_register_device err=%d\n", __func__, rc);
-		goto err_free_input_dev;
+		goto err_input_dev;
 	}
 
 	rc = input_register_handler(&s2w_input_handler);
@@ -577,15 +567,13 @@ static int __init sweep2wake_init(void)
 	if (rc) {
 		printk("%s: sysfs_create_file failed for sweep2wake_version\n", __func__);
 	}
-
+	pr_info(LOGTAG"%s done\n", __func__);
 	return 0;
 
-err_free_input_dev:
+err_input_dev:
 	input_free_device(sweep2wake_pwrdev);
 err_alloc_dev:
-	pr_info(LOGTAG"%s done\n", __func__);
-
-	return rc;
+	return rc ? rc : -ENOMEM;
 }
 
 static void __exit sweep2wake_exit(void)
@@ -597,6 +585,7 @@ static void __exit sweep2wake_exit(void)
 	lcd_unregister_client(&s2w_lcd_notif);
 #endif
 	input_unregister_handler(&s2w_input_handler);
+	cancel_work_sync(&sweep2wake_presspwr_work);
 	input_unregister_device(sweep2wake_pwrdev);
 	return;
 }
