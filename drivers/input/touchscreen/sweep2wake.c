@@ -543,7 +543,7 @@ static int __init sweep2wake_init(void)
 	rc = input_register_device(sweep2wake_pwrdev);
 	if (rc) {
 		pr_err("%s: input_register_device err=%d\n", __func__, rc);
-		goto err_input_dev;
+		goto err_free_input_dev;
 	}
 
 	rc = input_register_handler(&s2w_input_handler);
@@ -578,12 +578,14 @@ static int __init sweep2wake_init(void)
 		printk("%s: sysfs_create_file failed for sweep2wake_version\n", __func__);
 	}
 
-err_input_dev:
+	return 0;
+
+err_free_input_dev:
 	input_free_device(sweep2wake_pwrdev);
 err_alloc_dev:
 	pr_info(LOGTAG"%s done\n", __func__);
 
-	return 0;
+	return rc;
 }
 
 static void __exit sweep2wake_exit(void)
@@ -596,7 +598,6 @@ static void __exit sweep2wake_exit(void)
 #endif
 	input_unregister_handler(&s2w_input_handler);
 	input_unregister_device(sweep2wake_pwrdev);
-	input_free_device(sweep2wake_pwrdev);
 	return;
 }
 
