@@ -137,8 +137,8 @@ static void sweep2wake_reset(void) {
 
 static void sweep2wake_invalidate(void)
 {
+	gesture_blocked = contact_active;
 	sweep2wake_reset();
-	gesture_blocked = true;
 }
 
 static void s2w_reset_contact_state(void)
