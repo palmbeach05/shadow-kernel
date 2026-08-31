@@ -100,6 +100,18 @@ class CommentLineException(Exception):
 
 
 def parseLine(line):
+	"""Parse a single line from the function trace output.
+
+	Args:
+		line: A line from the trace file
+
+	Returns:
+		A tuple of (calltime, callee, caller) extracted from the line
+
+	Raises:
+		CommentLineException: If the line is a comment
+		BrokenLineException: If the line cannot be parsed
+	"""
 	line = line.strip()
 	if line.startswith("#"):
 		raise CommentLineException
@@ -110,6 +122,11 @@ def parseLine(line):
 
 
 def main():
+	"""Main entry point for the function trace drawing script.
+
+	Reads function trace data from stdin, builds a call tree,
+	and prints a hierarchical representation of the call stack.
+	"""
 	CallTree.ROOT = CallTree("Root (Nowhere)", None, None)
 	tree = CallTree.ROOT
 
