@@ -24,6 +24,13 @@ start_pattern = re.compile("<([^>]*)>: \[0x([0-9a-f]+)-0x([0-9a-f]+)\]")
 rlen_pattern  = re.compile(".*rlen=([0-9]+)")
 
 def check_func (func, slots, rlen_sum):
+    """Check if the number of slots matches the sum of region lengths.
+
+    Args:
+        func: Function name or False if not set
+        slots: Number of slots calculated for the function
+        rlen_sum: Sum of region lengths from unwind info
+    """
     if slots != rlen_sum:
         global num_errors
         num_errors += 1
