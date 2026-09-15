@@ -52,7 +52,7 @@ MODULE_LICENSE("GPLv2");
 
 /* Tuneables */
 #define S2W_DEBUG		0
-#define S2W_DEFAULT		0
+#define S2W_DEFAULT		1
 #define S2W_S2SONLY_DEFAULT	0
 #define S2W_PWRKEY_DUR          60
 #define S2W_MIN_DISPLACEMENT_PERCENT 60
@@ -137,8 +137,8 @@ static void sweep2wake_reset(void) {
 
 static void sweep2wake_invalidate(void)
 {
+	gesture_blocked = contact_active;
 	sweep2wake_reset();
-	gesture_blocked = true;
 }
 
 static void s2w_reset_contact_state(void)
