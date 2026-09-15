@@ -349,7 +349,6 @@ static int s2w_input_connect(struct input_handler *handler,
 	if (error)
 		goto err1;
 
-	pr_info(LOGTAG"attached to %s\n", dev->name);
 	return 0;
 err1:
 	input_unregister_handle(handle);
