@@ -523,8 +523,10 @@ static int __init sweep2wake_init(void)
 	}
 
 	rc = input_register_handler(&s2w_input_handler);
-	if (rc)
+	if (rc) {
 		pr_err("%s: Failed to register s2w_input_handler\n", __func__);
+		goto err_unregister_dev;
+	}
 
 #ifndef CONFIG_HAS_EARLYSUSPEND
 	s2w_lcd_notif.notifier_call = lcd_notifier_callback;
@@ -556,6 +558,9 @@ static int __init sweep2wake_init(void)
 	pr_info(LOGTAG"%s done\n", __func__);
 	return 0;
 
+err_unregister_dev:
+	input_unregister_device(sweep2wake_pwrdev);
+	return rc;
 err_input_dev:
 	input_free_device(sweep2wake_pwrdev);
 err_alloc_dev:
