@@ -33,6 +33,13 @@ class CallTree:
 	ROOT = None
 
 	def __init__(self, func, time = None, parent = None):
+		"""Initialize a CallTree node.
+
+		Args:
+			func: Name of the function for this node
+			time: Optional call time for the function
+			parent: Optional parent node (defaults to ROOT if None)
+		"""
 		self._func = func
 		self._time = time
 		if parent is None:
@@ -65,9 +72,23 @@ class CallTree:
 		return tree
 
 	def __repr__(self):
+		"""Return a string representation of the call tree.
+
+		Returns:
+			A hierarchical string representation of the call tree
+		"""
 		return self.__toString("", True)
 
 	def __toString(self, branch, lastChild):
+		"""Build a string representation of the tree with branch formatting.
+
+		Args:
+			branch: The branch prefix string for formatting
+			lastChild: Boolean indicating if this is the last child
+
+		Returns:
+			A formatted string showing this node and its children
+		"""
 		if self._time is not None:
 			s = "%s----%s (%s)\n" % (branch, self._func, self._time)
 		else:
