@@ -45,78 +45,86 @@ static struct notifier_block touchwake_lcd_notif;
 static void touchwake_notify_position(int x, int y)
 {
 	struct touchwake_client *client;
+	unsigned long flags;
 
-	read_lock(&touchwake_clients_lock);
+	read_lock_irqsave(&touchwake_clients_lock, flags);
 	list_for_each_entry(client, &touchwake_clients, node)
 		if (client->position)
 			client->position(x, y, x_min, x_max, y_min, y_max);
-	read_unlock(&touchwake_clients_lock);
+	read_unlock_irqrestore(&touchwake_clients_lock, flags);
 }
 
 static void touchwake_notify_release(void)
 {
 	struct touchwake_client *client;
+	unsigned long flags;
 
-	read_lock(&touchwake_clients_lock);
+	read_lock_irqsave(&touchwake_clients_lock, flags);
 	list_for_each_entry(client, &touchwake_clients, node)
 		if (client->release)
 			client->release();
-	read_unlock(&touchwake_clients_lock);
+	read_unlock_irqrestore(&touchwake_clients_lock, flags);
 }
 
 static void touchwake_notify_multitouch(void)
 {
 	struct touchwake_client *client;
+	unsigned long flags;
 
-	read_lock(&touchwake_clients_lock);
+	read_lock_irqsave(&touchwake_clients_lock, flags);
 	list_for_each_entry(client, &touchwake_clients, node)
 		if (client->multitouch)
 			client->multitouch();
-	read_unlock(&touchwake_clients_lock);
+	read_unlock_irqrestore(&touchwake_clients_lock, flags);
 }
 
 static void touchwake_notify_invalid(void)
 {
 	struct touchwake_client *client;
+	unsigned long flags;
 
-	read_lock(&touchwake_clients_lock);
+	read_lock_irqsave(&touchwake_clients_lock, flags);
 	list_for_each_entry(client, &touchwake_clients, node)
 		if (client->invalid)
 			client->invalid();
-	read_unlock(&touchwake_clients_lock);
+	read_unlock_irqrestore(&touchwake_clients_lock, flags);
 }
 
 static void touchwake_notify_display(void)
 {
 	struct touchwake_client *client;
+	unsigned long flags;
 
-	read_lock(&touchwake_clients_lock);
+	read_lock_irqsave(&touchwake_clients_lock, flags);
 	list_for_each_entry(client, &touchwake_clients, node)
 		if (client->display)
 			client->display(display_suspended);
-	read_unlock(&touchwake_clients_lock);
+	read_unlock_irqrestore(&touchwake_clients_lock, flags);
 }
 
 static void touchwake_notify_disconnect(void)
 {
 	struct touchwake_client *client;
+	unsigned long flags;
 
-	read_lock(&touchwake_clients_lock);
+	read_lock_irqsave(&touchwake_clients_lock, flags);
 	list_for_each_entry(client, &touchwake_clients, node)
 		if (client->disconnect)
 			client->disconnect();
-	read_unlock(&touchwake_clients_lock);
+	read_unlock_irqrestore(&touchwake_clients_lock, flags);
 }
 
 int touchwake_register_client(struct touchwake_client *client)
 {
+	unsigned long flags;
+
 	if (!client)
 		return -EINVAL;
 
-	write_lock(&touchwake_clients_lock);
+	write_lock_irqsave(&touchwake_clients_lock, flags);
 	INIT_LIST_HEAD(&client->node);
 	list_add_tail(&client->node, &touchwake_clients);
-	write_unlock(&touchwake_clients_lock);
+	write_unlock_irqrestore(&touchwake_clients_lock, flags);
 	if (client->display)
 		client->display(display_suspended);
 	return 0;
@@ -125,13 +133,15 @@ EXPORT_SYMBOL_GPL(touchwake_register_client);
 
 void touchwake_unregister_client(struct touchwake_client *client)
 {
+	unsigned long flags;
+
 	if (!client)
 		return;
 
-	write_lock(&touchwake_clients_lock);
+	write_lock_irqsave(&touchwake_clients_lock, flags);
 	if (!list_empty(&client->node))
 		list_del_init(&client->node);
-	write_unlock(&touchwake_clients_lock);
+	write_unlock_irqrestore(&touchwake_clients_lock, flags);
 }
 EXPORT_SYMBOL_GPL(touchwake_unregister_client);
 
@@ -426,4 +436,4 @@ module_init(touchwake_init);
 module_exit(touchwake_exit);
 
 MODULE_DESCRIPTION("Shared touchscreen wake gesture infrastructure");
-MODULE_LICENSE("GPLv2");
+MODULE_LICENSE("GPL v2");

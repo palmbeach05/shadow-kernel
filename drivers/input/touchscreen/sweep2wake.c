@@ -19,7 +19,7 @@
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESCRIPTION);
 MODULE_VERSION(DRIVER_VERSION);
-MODULE_LICENSE("GPLv2");
+MODULE_LICENSE("GPL v2");
 
 int s2w_switch = S2W_DEFAULT, s2w_s2sonly = S2W_S2SONLY_DEFAULT;
 static bool scr_suspended, contact_active, gesture_start_valid;
