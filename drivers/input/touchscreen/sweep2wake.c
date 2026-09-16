@@ -1,4 +1,5 @@
 /* Sweep2wake gesture recognition and controls. */
+#include <linux/device.h>
 #include <linux/init.h>
 #include <linux/input/sweep2wake.h>
 #include <linux/input/touchwake.h>
