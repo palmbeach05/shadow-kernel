@@ -11,7 +11,7 @@
 
 #define LOGTAG "[doubletap2wake]: "
 
-#define DT2W_DEFAULT 0
+#define DT2W_DEFAULT 1
 #define DT2W_MAX_TAP_DURATION_MS 250
 #define DT2W_MIN_INTERVAL_MS 50
 #define DT2W_MAX_INTERVAL_MS 500
