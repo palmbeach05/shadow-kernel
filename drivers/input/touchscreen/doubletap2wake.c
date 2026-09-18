@@ -224,11 +224,10 @@ static ssize_t dt2w_show(struct device *dev,
 static ssize_t dt2w_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	int setting;
+	unsigned long setting;
 
-	if (count != 2 || (buf[0] != '0' && buf[0] != '1') || buf[1] != '\n')
+	if (strict_strtoul(buf, 10, &setting) || setting > 1)
 		return -EINVAL;
-	setting = buf[0] - '0';
 	if (dt2w_switch != setting) {
 		dt2w_switch = setting;
 		dt2w_reset();
