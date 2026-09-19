@@ -62,6 +62,7 @@ test_opcodes = {
 
 # Print usage information
 def usage():
+    """Print usage information for the rt-tester script."""
     print "rt-tester.py <-c -h -q -t> <testfile>"
     print " -c    display comments after first command"
     print " -h    help"
@@ -73,11 +74,26 @@ def usage():
 
 # Print progress when not in quiet mode
 def progress(str):
+    """Print progress message when not in quiet mode.
+
+    Args:
+        str: Message string to print
+    """
     if not quiet:
         print str
 
 # Analyse a status value
 def analyse(val, top, arg):
+    """Analyse a status value and compare it against expected values.
+
+    Args:
+        val: Status value to analyse
+        top: Test operation containing type, comparison operator, and expected value
+        arg: Argument for the comparison
+
+    Returns:
+        1 if the comparison matches, 0 otherwise
+    """
 
     intval = int(val)
 
