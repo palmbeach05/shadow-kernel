@@ -131,6 +131,7 @@ static void sweep2wake_display(bool suspended)
 static void sweep2wake_disconnect(void)
 {
 	sweep2wake_invalidate();
+	gesture_blocked = false;
 	contact_active = false;
 }
 

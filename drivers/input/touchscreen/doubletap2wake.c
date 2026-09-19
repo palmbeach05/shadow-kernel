@@ -131,7 +131,8 @@ static void dt2w_position(int x, int y, int x_min, int x_max,
 			dt2w_block("interval too short");
 		} else if (interval >
 			   msecs_to_jiffies(DT2W_MAX_INTERVAL_MS)) {
-			dt2w_block("interval timeout");
+			pr_info(LOGTAG "interval timeout\n");
+			dt2w_start_tap(x, y, DT2W_FIRST_TAP_DOWN);
 		} else if (dt2w_pair_too_distant(x, y)) {
 			dt2w_block("tap-pair distance too large");
 		} else {
