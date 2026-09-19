@@ -21,6 +21,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <asm/clkdev.h>
 #include <plat/clock.h>
 #include <plat/control.h>
@@ -3074,7 +3075,6 @@ static struct clk wdt1_fck = {
 	.recalc		= &followparent_recalc,
 };
 
-#endif
 struct omap_clk {
 	u32		cpu;
 	struct clk_lookup lk;
