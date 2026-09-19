@@ -39,6 +39,7 @@
 #define ABS_MT_PRESSURE         0x3a
 
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+#include <linux/input/doubletap2wake.h>
 #include <linux/input/sweep2wake.h>
 #endif
 
@@ -2004,7 +2005,7 @@ static int qtouch_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 		return -EBUSY;
 
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE	
-	if (s2w_switch > 0)
+	if (s2w_switch > 0 || dt2w_switch > 0)
 		return 0;
 	else
 		goto do_resume;
