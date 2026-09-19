@@ -355,7 +355,8 @@ static struct dpll_data dpll2_dd = {
 #else
 	.min_divider	= 1,
 	.max_divider	= OMAP3_MAX_DPLL_DIV,
-	.rate_tolerance = DEFAULT_DPLL_RATE_TOLERANCE
+	.rate_tolerance = DEFAULT_DPLL_RATE_TOLERANCE,
+#endif
 };
 
 static struct clk dpll2_ck = {
