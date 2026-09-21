@@ -3,7 +3,7 @@ PATCHLEVEL = 6
 SUBLEVEL = 32
 EXTRAVERSION = .9
 NAME = Man-Eating Seals of Antiquity
-v
+
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
 # More info can be located in ./README
