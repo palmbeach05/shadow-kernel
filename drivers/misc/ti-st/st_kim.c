@@ -892,7 +892,7 @@ static int kim_probe(struct platform_device *pdev)
 	kim_gdata->baud_rate = pdata->baud_rate;
 	pr_info("sysfs entries created\n");
 
-	kim_gdata->debugfs_dir = debugfs_create_dir("ti-st", NULL);
+	kim_gdata->debugfs_dir = debugfs_create_dir(dev_name(&pdev->dev), NULL);
 	if (IS_ERR_OR_NULL(kim_gdata->debugfs_dir)) {
 		err = kim_gdata->debugfs_dir ?
 			PTR_ERR(kim_gdata->debugfs_dir) : -ENOMEM;
