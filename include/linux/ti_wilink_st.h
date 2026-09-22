@@ -27,6 +27,8 @@
 
 #include <linux/skbuff.h>
 
+struct dentry;
+
 /**
  * enum proto-type - The protocol on WiLink chips which share a
  *	common physical interface like UART.
@@ -254,6 +256,7 @@ struct chip_version {
  *	response.
  * @core_data: ST core's data, which mainly is the tty's disc_data
  * @version: chip version available via a sysfs entry.
+ * @debugfs_dir: per-device debugfs directory.
  *
  */
 struct kim_data_s {
@@ -268,6 +271,7 @@ struct kim_data_s {
 	struct sk_buff *rx_skb;
 	struct st_data_s *core_data;
 	struct chip_version version;
+	struct dentry *debugfs_dir;
 	unsigned char ldisc_install;
 	unsigned char dev_name[UART_DEV_NAME_LEN + 1];
 	unsigned flow_cntrl;

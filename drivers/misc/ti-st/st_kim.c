@@ -828,19 +828,19 @@ DEFINE_SHOW_ATTRIBUTE(list);
  * board-*.c file
  */
 
-static struct dentry *kim_debugfs_dir;
 static int kim_probe(struct platform_device *pdev)
 {
 	struct kim_data_s	*kim_gdata;
 	struct ti_st_plat_data	*pdata = pdev->dev.platform_data;
+	struct dentry		*debugfs_file;
+	int device_id;
 	int err;
 
-	if ((pdev->id != -1) && (pdev->id < MAX_ST_DEVICES)) {
-		/* multiple devices could exist */
-		st_kim_devices[pdev->id] = pdev;
+	if ((pdev->id >= 0) && (pdev->id < MAX_ST_DEVICES)) {
+		device_id = pdev->id;
 	} else {
 		/* platform's sure about existence of 1 device */
-		st_kim_devices[0] = pdev;
+		device_id = 0;
 	}
 
 	kim_gdata = kzalloc(sizeof(struct kim_data_s), GFP_KERNEL);
@@ -852,8 +852,7 @@ static int kim_probe(struct platform_device *pdev)
 
 	err = st_core_init(&kim_gdata->core_data);
 	if (err != 0) {
-		pr_err(" ST core init failed");
-		err = -EIO;
+		pr_err("ST core init failed: %d", err);
 		goto err_core_init;
 	}
 	/* refer to itself */
@@ -863,15 +862,17 @@ static int kim_probe(struct platform_device *pdev)
 	kim_gdata->nshutdown = pdata->nshutdown_gpio;
 	err = gpio_request(kim_gdata->nshutdown, "kim");
 	if (unlikely(err)) {
-		pr_err(" gpio %d request failed ", kim_gdata->nshutdown);
-		goto err_sysfs_group;
+		pr_err("gpio %d request failed: %d", kim_gdata->nshutdown,
+		       err);
+		goto err_gpio_request;
 	}
 
 	/* Configure nShutdown GPIO as output=0 */
 	err = gpio_direction_output(kim_gdata->nshutdown, 0);
 	if (unlikely(err)) {
-		pr_err(" unable to configure gpio %d", kim_gdata->nshutdown);
-		goto err_sysfs_group;
+		pr_err("unable to configure gpio %d: %d",
+		       kim_gdata->nshutdown, err);
+		goto err_gpio_direction;
 	}
 	/* get reference of pdev for request_firmware */
 	kim_gdata->kim_pdev = pdev;
@@ -880,7 +881,7 @@ static int kim_probe(struct platform_device *pdev)
 
 	err = sysfs_create_group(&pdev->dev.kobj, &uim_attr_grp);
 	if (err) {
-		pr_err("failed to create sysfs entries");
+		pr_err("failed to create sysfs entries: %d", err);
 		goto err_sysfs_group;
 	}
 
@@ -891,18 +892,55 @@ static int kim_probe(struct platform_device *pdev)
 	kim_gdata->baud_rate = pdata->baud_rate;
 	pr_info("sysfs entries created\n");
 
-	kim_debugfs_dir = debugfs_create_dir("ti-st", NULL);
+	kim_gdata->debugfs_dir = debugfs_create_dir(dev_name(&pdev->dev), NULL);
+	if (IS_ERR_OR_NULL(kim_gdata->debugfs_dir)) {
+		err = kim_gdata->debugfs_dir ?
+			PTR_ERR(kim_gdata->debugfs_dir) : -ENOMEM;
+		if (err == -ENODEV) {
+			kim_gdata->debugfs_dir = NULL;
+			goto debugfs_unavailable;
+		}
+		pr_err("failed to create debugfs directory: %d", err);
+		kim_gdata->debugfs_dir = NULL;
+		goto err_debugfs_dir;
+	}
 
-	debugfs_create_file("version", S_IRUGO, kim_debugfs_dir,
+	debugfs_file = debugfs_create_file("version", S_IRUGO,
+				kim_gdata->debugfs_dir,
 				kim_gdata, &version_fops);
-	debugfs_create_file("protocols", S_IRUGO, kim_debugfs_dir,
+	if (IS_ERR_OR_NULL(debugfs_file)) {
+		err = debugfs_file ? PTR_ERR(debugfs_file) : -ENOMEM;
+		pr_err("failed to create version debugfs entry: %d", err);
+		goto err_debugfs_file;
+	}
+
+	debugfs_file = debugfs_create_file("protocols", S_IRUGO,
+				kim_gdata->debugfs_dir,
 				kim_gdata, &list_fops);
+	if (IS_ERR_OR_NULL(debugfs_file)) {
+		err = debugfs_file ? PTR_ERR(debugfs_file) : -ENOMEM;
+		pr_err("failed to create protocols debugfs entry: %d", err);
+		goto err_debugfs_file;
+	}
+
+debugfs_unavailable:
+	st_kim_devices[device_id] = pdev;
 	return 0;
 
+err_debugfs_file:
+	debugfs_remove_recursive(kim_gdata->debugfs_dir);
+	kim_gdata->debugfs_dir = NULL;
+err_debugfs_dir:
+	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 err_sysfs_group:
+	kim_gdata->kim_pdev = NULL;
+err_gpio_direction:
+	gpio_free(kim_gdata->nshutdown);
+err_gpio_request:
+	kim_gdata->core_data->kim_data = NULL;
 	st_core_exit(kim_gdata->core_data);
-
 err_core_init:
+	platform_set_drvdata(pdev, NULL);
 	kfree(kim_gdata);
 
 	return err;
@@ -910,28 +948,34 @@ err_core_init:
 
 static int kim_remove(struct platform_device *pdev)
 {
-	/* free the GPIOs requested */
-	struct ti_st_plat_data	*pdata = pdev->dev.platform_data;
 	struct kim_data_s	*kim_gdata;
+	int device_id;
 
 	kim_gdata = platform_get_drvdata(pdev);
+	if (!kim_gdata)
+		return 0;
 
-	/*
-	 * Free the Bluetooth/FM/GPIO
-	 * nShutdown gpio from the system
-	 */
-	gpio_free(pdata->nshutdown_gpio);
-	pr_info("nshutdown GPIO Freed");
+	if ((pdev->id >= 0) && (pdev->id < MAX_ST_DEVICES))
+		device_id = pdev->id;
+	else
+		device_id = 0;
+	st_kim_devices[device_id] = NULL;
 
-	debugfs_remove_recursive(kim_debugfs_dir);
+	debugfs_remove_recursive(kim_gdata->debugfs_dir);
+	kim_gdata->debugfs_dir = NULL;
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 	pr_info("sysfs entries removed");
 
 	kim_gdata->kim_pdev = NULL;
-	st_core_exit(kim_gdata->core_data);
+	gpio_free(kim_gdata->nshutdown);
+	pr_info("nshutdown GPIO freed");
 
+	kim_gdata->core_data->kim_data = NULL;
+	st_core_exit(kim_gdata->core_data);
+	kim_gdata->core_data = NULL;
+
+	platform_set_drvdata(pdev, NULL);
 	kfree(kim_gdata);
-	kim_gdata = NULL;
 	return 0;
 }
 
