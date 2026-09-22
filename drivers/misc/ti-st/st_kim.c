@@ -277,24 +277,39 @@ static long read_local_version(struct kim_data_s *kim_gdata, char *bts_scr_name)
 	return 0;
 }
 
-static void skip_change_remote_baud(unsigned char **ptr, long *len)
+static int skip_change_remote_baud(unsigned char **ptr, size_t *len)
 {
+	struct bts_action *action;
 	unsigned char *nxt_action, *cur_action;
+	size_t action_len;
+
 	cur_action = *ptr;
+	action = (struct bts_action *)cur_action;
+	action_len = sizeof(*action) + action->size;
+	nxt_action = cur_action + action_len;
 
-	nxt_action = cur_action + sizeof(struct bts_action) +
-		((struct bts_action *) cur_action)->size;
+	if (*len - action_len < sizeof(*action)) {
+		pr_err("malformed firmware: missing wait event after change remote baud command");
+		return -EINVAL;
+	}
 
-	if (((struct bts_action *) nxt_action)->type != ACTION_WAIT_EVENT) {
+	action = (struct bts_action *)nxt_action;
+	if (action->size > *len - action_len - sizeof(*action)) {
+		pr_err("malformed firmware: truncated wait event after change remote baud command");
+		return -EINVAL;
+	}
+
+	if (action->type != ACTION_WAIT_EVENT) {
 		pr_err("invalid action after change remote baud command");
+		return -EINVAL;
 	} else {
-		*ptr = *ptr + sizeof(struct bts_action) +
-			((struct bts_action *)cur_action)->size;
-		*len = *len - (sizeof(struct bts_action) +
-				((struct bts_action *)cur_action)->size);
+		*ptr = nxt_action;
+		*len -= action_len;
 		/* warn user on not commenting these in firmware */
 		pr_warn("skipping the wait event of change remote baud");
 	}
+
+	return 0;
 }
 
 /*
@@ -305,9 +320,10 @@ static void skip_change_remote_baud(unsigned char **ptr, long *len)
 static long download_firmware(struct kim_data_s *kim_gdata)
 {
 	long err = 0;
-	long len = 0;
+	size_t len = 0;
 	unsigned char *ptr = NULL;
 	unsigned char *action_ptr = NULL;
+	struct bts_action *action;
 	char bts_scr_name[40] = { 0 };	/* 40 char long bts scr name? */
 	const char *fw_names[4];
 	int wr_room_space;
@@ -352,18 +368,52 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 	 * bts_header to remove out magic number and
 	 * version
 	 */
+	if (len < sizeof(struct bts_header)) {
+		pr_err("malformed firmware: truncated BTS header (%u bytes)",
+			(unsigned int)len);
+		err = -EINVAL;
+		goto release_firmware;
+	}
 	ptr += sizeof(struct bts_header);
 	len -= sizeof(struct bts_header);
 
-	while (len > 0 && ptr) {
-		pr_debug(" action size %d, type %d ",
-			   ((struct bts_action *)ptr)->size,
-			   ((struct bts_action *)ptr)->type);
+	while (len > 0) {
+		if (len < sizeof(*action)) {
+			pr_err("malformed firmware: truncated BTS action header (%u bytes remain)",
+				(unsigned int)len);
+			err = -EINVAL;
+			goto release_firmware;
+		}
 
-		switch (((struct bts_action *)ptr)->type) {
+		action = (struct bts_action *)ptr;
+		if (action->size > len - sizeof(*action)) {
+			pr_err("malformed firmware: action type %u payload size %u exceeds %u remaining bytes",
+				(unsigned int)action->type,
+				(unsigned int)action->size,
+				(unsigned int)(len - sizeof(*action)));
+			err = -EINVAL;
+			goto release_firmware;
+		}
+
+		pr_debug(" action size %d, type %d ",
+			   action->size, action->type);
+
+		switch (action->type) {
 		case ACTION_SEND_COMMAND:	/* action send */
 			pr_debug("S");
-			action_ptr = &(((struct bts_action *)ptr)->data[0]);
+			if (action->size < offsetof(struct hci_command, speed)) {
+				pr_err("malformed firmware: send command payload is too short (%u bytes)",
+					(unsigned int)action->size);
+				err = -EINVAL;
+				goto release_firmware;
+			}
+			action_ptr = &action->data[0];
+			if (((struct hci_command *)action_ptr)->plen !=
+			    action->size - offsetof(struct hci_command, speed)) {
+				pr_err("malformed firmware: send command payload length does not match plen");
+				err = -EINVAL;
+				goto release_firmware;
+			}
 			if (unlikely
 			    (((struct hci_command *)action_ptr)->opcode ==
 			     0xFF36)) {
@@ -373,14 +423,17 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 				 */
 				pr_warn("change remote baud"
 				    " rate command in firmware");
-				skip_change_remote_baud(&ptr, &len);
+				err = skip_change_remote_baud(&ptr, &len);
+				if (err)
+					goto release_firmware;
+				action = (struct bts_action *)ptr;
 				break;
 			}
 			/*
 			 * Make sure we have enough free space in uart
 			 * tx buffer to write current firmware command
 			 */
-			cmd_size = ((struct bts_action *)ptr)->size;
+			cmd_size = action->size;
 			timeout = jiffies + msecs_to_jiffies(CMD_WR_TIME);
 			do {
 				wr_room_space =
@@ -388,8 +441,8 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 				if (wr_room_space < 0) {
 					pr_err("Unable to get free "
 							"space info from uart tx buffer");
-					release_firmware(kim_gdata->fw_entry);
-					return wr_room_space;
+					err = wr_room_space;
+					goto release_firmware;
 				}
 				mdelay(1); /* wait 1ms before checking room */
 			} while ((wr_room_space < cmd_size) &&
@@ -399,8 +452,8 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			if (time_after_eq(jiffies, timeout)) {
 				pr_err("Timeout while waiting for free "
 						"free space in uart tx buffer");
-				release_firmware(kim_gdata->fw_entry);
-				return -ETIMEDOUT;
+				err = -ETIMEDOUT;
+				goto release_firmware;
 			}
 			/*
 			 * reinit completion before sending for the
@@ -415,10 +468,9 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			 */
 			err = st_int_write(kim_gdata->core_data,
 			((struct bts_action_send *)action_ptr)->data,
-					   ((struct bts_action *)ptr)->size);
+					   action->size);
 			if (unlikely(err < 0)) {
-				release_firmware(kim_gdata->fw_entry);
-				return err;
+				goto release_firmware;
 			}
 			/*
 			 * Check number of bytes written to the uart tx buffer
@@ -428,8 +480,8 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 				pr_err("Number of bytes written to uart "
 						"tx buffer are not matching with "
 						"requested cmd write size");
-				release_firmware(kim_gdata->fw_entry);
-				return -EIO;
+				err = -EIO;
+				goto release_firmware;
 			}
 			break;
 		case ACTION_WAIT_EVENT:  /* wait */
@@ -440,27 +492,33 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			if (err <= 0) {
 				pr_err("response timeout/signaled during fw download ");
 				/* timed out */
-				release_firmware(kim_gdata->fw_entry);
-				return err ? -ERESTARTSYS : -ETIMEDOUT;
+				err = err ? -ERESTARTSYS : -ETIMEDOUT;
+				goto release_firmware;
 			}
 			reinit_completion(&kim_gdata->kim_rcvd);
 			break;
 		case ACTION_DELAY:	/* sleep */
 			pr_info("sleep command in scr");
-			action_ptr = &(((struct bts_action *)ptr)->data[0]);
+			if (action->size < sizeof(struct bts_action_delay)) {
+				pr_err("malformed firmware: delay payload is too short (%u bytes)",
+					(unsigned int)action->size);
+				err = -EINVAL;
+				goto release_firmware;
+			}
+			action_ptr = &action->data[0];
 			mdelay(((struct bts_action_delay *)action_ptr)->msec);
 			break;
 		}
-		len =
-		    len - (sizeof(struct bts_action) +
-			   ((struct bts_action *)ptr)->size);
-		ptr =
-		    ptr + sizeof(struct bts_action) +
-		    ((struct bts_action *)ptr)->size;
+		len -= sizeof(*action) + action->size;
+		ptr += sizeof(*action) + action->size;
 	}
 	/* fw download complete */
+	err = 0;
+
+release_firmware:
 	release_firmware(kim_gdata->fw_entry);
-	return 0;
+	kim_gdata->fw_entry = NULL;
+	return err;
 }
 
 /**********************************************************************/
