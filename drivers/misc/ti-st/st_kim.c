@@ -42,22 +42,6 @@
 #define reinit_completion(x) INIT_COMPLETION(*(x))
 #endif
 
-#ifndef DEFINE_SHOW_ATTRIBUTE
-#define DEFINE_SHOW_ATTRIBUTE(__name)					\
-static int __name ## _open(struct inode *inode, struct file *file)	\
-{									\
-	return single_open(file, __name ## _show, inode->i_private);	\
-}									\
-									\
-static const struct file_operations __name ## _fops = {			\
-	.owner		= THIS_MODULE,					\
-	.open		= __name ## _open,				\
-	.read		= seq_read,					\
-	.llseek		= seq_lseek,					\
-	.release	= single_release,				\
-}
-#endif
-
 #define MAX_ST_DEVICES	3	/* Imagine 1 on each UART for now */
 static struct platform_device *st_kim_devices[MAX_ST_DEVICES];
 
@@ -711,6 +695,86 @@ static int list_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
+static void kim_debugfs_ref_release(struct kref *ref)
+{
+	struct kim_data_s *kim_gdata = container_of(ref,
+			struct kim_data_s, debugfs_ref);
+
+	complete(&kim_gdata->debugfs_ref_complete);
+}
+
+static int kim_debugfs_open(struct inode *inode, struct file *file,
+		int (*show)(struct seq_file *, void *))
+{
+	struct kim_data_s *kim_gdata = inode->i_private;
+	int err;
+
+	mutex_lock(&kim_gdata->debugfs_lock);
+	if (kim_gdata->debugfs_removed) {
+		mutex_unlock(&kim_gdata->debugfs_lock);
+		return -ENODEV;
+	}
+	kref_get(&kim_gdata->debugfs_ref);
+	mutex_unlock(&kim_gdata->debugfs_lock);
+
+	err = single_open(file, show, kim_gdata);
+	if (err)
+		kref_put(&kim_gdata->debugfs_ref, kim_debugfs_ref_release);
+
+	return err;
+}
+
+static int version_open(struct inode *inode, struct file *file)
+{
+	return kim_debugfs_open(inode, file, version_show);
+}
+
+static int list_open(struct inode *inode, struct file *file)
+{
+	return kim_debugfs_open(inode, file, list_show);
+}
+
+static int kim_debugfs_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+	struct kim_data_s *kim_gdata = seq->private;
+	int err;
+
+	err = single_release(inode, file);
+	kref_put(&kim_gdata->debugfs_ref, kim_debugfs_ref_release);
+
+	return err;
+}
+
+static const struct file_operations version_fops = {
+	.owner		= THIS_MODULE,
+	.open		= version_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= kim_debugfs_release,
+};
+
+static const struct file_operations list_fops = {
+	.owner		= THIS_MODULE,
+	.open		= list_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= kim_debugfs_release,
+};
+
+static void kim_debugfs_remove(struct kim_data_s *kim_gdata)
+{
+	mutex_lock(&kim_gdata->debugfs_lock);
+	kim_gdata->debugfs_removed = true;
+	mutex_unlock(&kim_gdata->debugfs_lock);
+
+	debugfs_remove_recursive(kim_gdata->debugfs_dir);
+	kim_gdata->debugfs_dir = NULL;
+
+	kref_put(&kim_gdata->debugfs_ref, kim_debugfs_ref_release);
+	wait_for_completion(&kim_gdata->debugfs_ref_complete);
+}
+
 static ssize_t show_install(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -819,9 +883,6 @@ err:
 	*core_data = NULL;
 }
 
-DEFINE_SHOW_ATTRIBUTE(version);
-DEFINE_SHOW_ATTRIBUTE(list);
-
 /**********************************************************************/
 /* functions called from platform device driver subsystem
  * need to have a relevant platform device entry in the platform's
@@ -892,6 +953,10 @@ static int kim_probe(struct platform_device *pdev)
 	kim_gdata->baud_rate = pdata->baud_rate;
 	pr_info("sysfs entries created\n");
 
+	kref_init(&kim_gdata->debugfs_ref);
+	init_completion(&kim_gdata->debugfs_ref_complete);
+	mutex_init(&kim_gdata->debugfs_lock);
+
 	kim_gdata->debugfs_dir = debugfs_create_dir(dev_name(&pdev->dev), NULL);
 	if (IS_ERR_OR_NULL(kim_gdata->debugfs_dir)) {
 		err = kim_gdata->debugfs_dir ?
@@ -902,7 +967,7 @@ static int kim_probe(struct platform_device *pdev)
 		}
 		pr_err("failed to create debugfs directory: %d", err);
 		kim_gdata->debugfs_dir = NULL;
-		goto err_debugfs_dir;
+		goto err_debugfs;
 	}
 
 	debugfs_file = debugfs_create_file("version", S_IRUGO,
@@ -911,7 +976,7 @@ static int kim_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(debugfs_file)) {
 		err = debugfs_file ? PTR_ERR(debugfs_file) : -ENOMEM;
 		pr_err("failed to create version debugfs entry: %d", err);
-		goto err_debugfs_file;
+		goto err_debugfs;
 	}
 
 	debugfs_file = debugfs_create_file("protocols", S_IRUGO,
@@ -920,17 +985,15 @@ static int kim_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(debugfs_file)) {
 		err = debugfs_file ? PTR_ERR(debugfs_file) : -ENOMEM;
 		pr_err("failed to create protocols debugfs entry: %d", err);
-		goto err_debugfs_file;
+		goto err_debugfs;
 	}
 
 debugfs_unavailable:
 	st_kim_devices[device_id] = pdev;
 	return 0;
 
-err_debugfs_file:
-	debugfs_remove_recursive(kim_gdata->debugfs_dir);
-	kim_gdata->debugfs_dir = NULL;
-err_debugfs_dir:
+err_debugfs:
+	kim_debugfs_remove(kim_gdata);
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 err_sysfs_group:
 	kim_gdata->kim_pdev = NULL;
@@ -961,8 +1024,7 @@ static int kim_remove(struct platform_device *pdev)
 		device_id = 0;
 	st_kim_devices[device_id] = NULL;
 
-	debugfs_remove_recursive(kim_gdata->debugfs_dir);
-	kim_gdata->debugfs_dir = NULL;
+	kim_debugfs_remove(kim_gdata);
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 	pr_info("sysfs entries removed");
 

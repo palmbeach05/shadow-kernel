@@ -25,6 +25,9 @@
 #ifndef TI_WILINK_ST_H
 #define TI_WILINK_ST_H
 
+#include <linux/completion.h>
+#include <linux/kref.h>
+#include <linux/mutex.h>
 #include <linux/skbuff.h>
 
 struct dentry;
@@ -257,6 +260,10 @@ struct chip_version {
  * @core_data: ST core's data, which mainly is the tty's disc_data
  * @version: chip version available via a sysfs entry.
  * @debugfs_dir: per-device debugfs directory.
+ * @debugfs_ref: references held by debugfs and its open files.
+ * @debugfs_ref_complete: notified when the last debugfs reference is gone.
+ * @debugfs_lock: protects debugfs_removed and reference acquisition.
+ * @debugfs_removed: prevents new debugfs references during teardown.
  *
  */
 struct kim_data_s {
@@ -272,6 +279,10 @@ struct kim_data_s {
 	struct st_data_s *core_data;
 	struct chip_version version;
 	struct dentry *debugfs_dir;
+	struct kref debugfs_ref;
+	struct completion debugfs_ref_complete;
+	struct mutex debugfs_lock;
+	bool debugfs_removed;
 	unsigned char ldisc_install;
 	unsigned char dev_name[UART_DEV_NAME_LEN + 1];
 	unsigned flow_cntrl;
