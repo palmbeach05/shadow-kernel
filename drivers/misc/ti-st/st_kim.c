@@ -401,13 +401,19 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 		switch (action->type) {
 		case ACTION_SEND_COMMAND:	/* action send */
 			pr_debug("S");
-			if (action->size < offsetof(struct hci_command, plen)) {
+			if (action->size < offsetof(struct hci_command, speed)) {
 				pr_err("malformed firmware: send command payload is too short (%u bytes)",
 					(unsigned int)action->size);
 				err = -EINVAL;
 				goto release_firmware;
 			}
 			action_ptr = &action->data[0];
+			if (((struct hci_command *)action_ptr)->plen !=
+			    action->size - offsetof(struct hci_command, speed)) {
+				pr_err("malformed firmware: send command payload length does not match plen");
+				err = -EINVAL;
+				goto release_firmware;
+			}
 			if (unlikely
 			    (((struct hci_command *)action_ptr)->opcode ==
 			     0xFF36)) {
