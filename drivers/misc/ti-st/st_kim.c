@@ -86,8 +86,14 @@ static struct platform_device *st_get_plat_device(int id)
 static void validate_firmware_response(struct kim_data_s *kim_gdata)
 {
 	struct sk_buff *skb = kim_gdata->rx_skb;
+
 	if (!skb)
 		return;
+	if (skb->len < 6) {
+		pr_err("malformed firmware response: only %u bytes received",
+		       skb->len);
+		goto invalid_response;
+	}
 
 	/*
 	 * these magic numbers are the position in the response buffer which
@@ -96,22 +102,39 @@ static void validate_firmware_response(struct kim_data_s *kim_gdata)
 	 */
 	if (skb->data[2] == 0x01 && skb->data[3] == 0x01 &&
 			skb->data[4] == 0x10 && skb->data[5] == 0x00) {
+		if (skb->len < 14) {
+			pr_err("truncated read-local-version response: only %u bytes received",
+			       skb->len);
+			goto invalid_response;
+		}
+		if (skb->len > sizeof(kim_gdata->resp_buffer)) {
+			pr_err("read-local-version response too large: %u bytes received, buffer holds %u",
+			       skb->len,
+			       (unsigned int)sizeof(kim_gdata->resp_buffer));
+			goto invalid_response;
+		}
 		/* fw version response */
 		memcpy(kim_gdata->resp_buffer,
-				kim_gdata->rx_skb->data,
-				kim_gdata->rx_skb->len);
+		       skb->data, skb->len);
 		kim_gdata->rx_state = ST_W4_PACKET_TYPE;
 		kim_gdata->rx_skb = NULL;
 		kim_gdata->rx_count = 0;
 	} else if (unlikely(skb->data[5] != 0)) {
 		pr_err("no proper response during fw download");
 		pr_err("data6 %x", skb->data[5]);
-		kfree_skb(skb);
-		return;		/* keep waiting for the proper response */
+		goto invalid_response;
 	}
 	/* becos of all the script being downloaded */
 	complete_all(&kim_gdata->kim_rcvd);
 	kfree_skb(skb);
+	return;
+
+invalid_response:
+	kim_gdata->rx_state = ST_W4_PACKET_TYPE;
+	kim_gdata->rx_skb = NULL;
+	kim_gdata->rx_count = 0;
+	kfree_skb(skb);
+	return;		/* keep waiting for the proper response */
 }
 
 /*
