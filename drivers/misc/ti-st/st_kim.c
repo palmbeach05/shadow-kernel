@@ -308,9 +308,11 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 	long len = 0;
 	unsigned char *ptr = NULL;
 	unsigned char *action_ptr = NULL;
-	unsigned char bts_scr_name[40] = { 0 };	/* 40 char long bts scr name? */
+	char bts_scr_name[40] = { 0 };	/* 40 char long bts scr name? */
+	const char *fw_names[4];
 	int wr_room_space;
 	int cmd_size;
+	unsigned int i;
 	unsigned long timeout;
 
 	err = read_local_version(kim_gdata, bts_scr_name);
@@ -319,48 +321,28 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 		return err;
 	}
 
-	/* 
-	 * STEP 1: Determine the "Base Path" 
-	 * We check if the 'ti-connectivity/' directory exists by looking for the 
-	 * hardware-default file there first.
-	 */
-	err = request_firmware(&kim_gdata->fw_entry, bts_scr_name,
-		&kim_gdata->kim_pdev->dev);
+	fw_names[0] = "ti-connectivity/TIInit_7.6.15.bts";
+	fw_names[1] = "TIInit_7.6.15.bts";
+	fw_names[2] = bts_scr_name;
+	fw_names[3] = bts_scr_name + sizeof("ti-connectivity/") - 1;
 
-	if (err == 0) {
-		/* MODERN PATH DETECTED */
-		pr_info("kim: modern path detected, checking for preferred 7.6.15 override");
-		release_firmware(kim_gdata->fw_entry);
-
-		/* Try to override with 7.6.15 in the modern path */
-		err = request_firmware(&kim_gdata->fw_entry, "ti-connectivity/TIInit_7.6.15.bts",
+	for (i = 0; i < ARRAY_SIZE(fw_names); i++) {
+		pr_info("kim: requesting firmware %s", fw_names[i]);
+		err = request_firmware(&kim_gdata->fw_entry, fw_names[i],
 			&kim_gdata->kim_pdev->dev);
-
-		if (err != 0) {
-			pr_info("kim: 7.6.15 override not found, falling back to hardware default 7.2.31");
-			err = request_firmware(&kim_gdata->fw_entry, bts_scr_name,
-				&kim_gdata->kim_pdev->dev);
+		if (!err) {
+			pr_info("kim: selected firmware %s", fw_names[i]);
+			break;
 		}
-	} 
-	else if (err == -2) {
-		/* LEGACY PATH DETECTED (Modern path returned ENOENT) */
-		pr_info("kim: modern path not found, probing legacy root path");
-	
-		/* Try to override with 7.6.15 in the legacy path (root) */
-		err = request_firmware(&kim_gdata->fw_entry, "TIInit_7.6.15.bts",
-			&kim_gdata->kim_pdev->dev);
 
-		if (err != 0) {
-			pr_info("kim: 7.6.15 legacy not found, trying hardware default legacy");
-			/* bts_scr_name[16] skips "ti-connectivity/" */
-			err = request_firmware(&kim_gdata->fw_entry, &bts_scr_name[16],
-				&kim_gdata->kim_pdev->dev);
-		}
+		if (i + 1 < ARRAY_SIZE(fw_names))
+			pr_info("kim: firmware %s unavailable (%ld), trying %s",
+				fw_names[i], err, fw_names[i + 1]);
 	}
 
-	/* FINAL VALIDATION */
 	if (unlikely((err != 0) || (kim_gdata->fw_entry == NULL))) {
-		pr_err("kim: firmware load failed (errno %ld)", err);
+		pr_err("kim: failed to load firmware %s (errno %ld)",
+			fw_names[ARRAY_SIZE(fw_names) - 1], err);
 		return -EINVAL;
 	}
 
