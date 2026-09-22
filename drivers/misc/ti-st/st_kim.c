@@ -828,7 +828,6 @@ DEFINE_SHOW_ATTRIBUTE(list);
  * board-*.c file
  */
 
-static struct dentry *kim_debugfs_dir;
 static int kim_probe(struct platform_device *pdev)
 {
 	struct kim_data_s	*kim_gdata;
@@ -893,19 +892,21 @@ static int kim_probe(struct platform_device *pdev)
 	kim_gdata->baud_rate = pdata->baud_rate;
 	pr_info("sysfs entries created\n");
 
-	kim_debugfs_dir = debugfs_create_dir("ti-st", NULL);
-	if (IS_ERR_OR_NULL(kim_debugfs_dir)) {
-		err = kim_debugfs_dir ? PTR_ERR(kim_debugfs_dir) : -ENOMEM;
+	kim_gdata->debugfs_dir = debugfs_create_dir(dev_name(&pdev->dev), NULL);
+	if (IS_ERR_OR_NULL(kim_gdata->debugfs_dir)) {
+		err = kim_gdata->debugfs_dir ?
+			PTR_ERR(kim_gdata->debugfs_dir) : -ENOMEM;
 		if (err == -ENODEV) {
-			kim_debugfs_dir = NULL;
+			kim_gdata->debugfs_dir = NULL;
 			goto debugfs_unavailable;
 		}
 		pr_err("failed to create debugfs directory: %d", err);
-		kim_debugfs_dir = NULL;
+		kim_gdata->debugfs_dir = NULL;
 		goto err_debugfs_dir;
 	}
 
-	debugfs_file = debugfs_create_file("version", S_IRUGO, kim_debugfs_dir,
+	debugfs_file = debugfs_create_file("version", S_IRUGO,
+				kim_gdata->debugfs_dir,
 				kim_gdata, &version_fops);
 	if (IS_ERR_OR_NULL(debugfs_file)) {
 		err = debugfs_file ? PTR_ERR(debugfs_file) : -ENOMEM;
@@ -914,7 +915,7 @@ static int kim_probe(struct platform_device *pdev)
 	}
 
 	debugfs_file = debugfs_create_file("protocols", S_IRUGO,
-				kim_debugfs_dir,
+				kim_gdata->debugfs_dir,
 				kim_gdata, &list_fops);
 	if (IS_ERR_OR_NULL(debugfs_file)) {
 		err = debugfs_file ? PTR_ERR(debugfs_file) : -ENOMEM;
@@ -927,8 +928,8 @@ debugfs_unavailable:
 	return 0;
 
 err_debugfs_file:
-	debugfs_remove_recursive(kim_debugfs_dir);
-	kim_debugfs_dir = NULL;
+	debugfs_remove_recursive(kim_gdata->debugfs_dir);
+	kim_gdata->debugfs_dir = NULL;
 err_debugfs_dir:
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 err_sysfs_group:
@@ -960,8 +961,8 @@ static int kim_remove(struct platform_device *pdev)
 		device_id = 0;
 	st_kim_devices[device_id] = NULL;
 
-	debugfs_remove_recursive(kim_debugfs_dir);
-	kim_debugfs_dir = NULL;
+	debugfs_remove_recursive(kim_gdata->debugfs_dir);
+	kim_gdata->debugfs_dir = NULL;
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 	pr_info("sysfs entries removed");
 
