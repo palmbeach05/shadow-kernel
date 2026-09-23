@@ -150,6 +150,12 @@ int hci_tty_open(struct inode *inod, struct file *file)
 	if (!hst)
 		return -ENOMEM;
 
+	err = st_claim_bt_channels(ST_BT_OWNER_HCI_TTY);
+	if (err) {
+		kfree(hst);
+		return err;
+	}
+
 	file->private_data = hst;
 
 	skb_queue_head_init(&hst->rx_list);
@@ -219,10 +225,12 @@ int hci_tty_open(struct inode *inod, struct file *file)
 unreg:
 	while (i-- >=  0)
 		/* Undo registration with ST */
-		if (st_unregister(&ti_st_proto[i]))
+		if (st_unregister(&ti_st_proto[i])) {
 			pr_err("st_unregister() failed with ");
+		}
 
 	kfree(hst);
+	st_release_bt_channels(ST_BT_OWNER_HCI_TTY);
 
 	return err;
 }
@@ -244,15 +252,21 @@ int hci_tty_release(struct inode *inod, struct file *file)
 	pr_info("inside %s (%p, %p)\n", __func__, inod, file);
 
 	for (i = 0; i < MAX_BT_CHNL_IDS; i++) {
-		err = st_unregister(&ti_st_proto[i]);
-		if (err)
+		int unreg_err = st_unregister(&ti_st_proto[i]);
+
+		if (unreg_err) {
 			pr_err("st_unregister(%d) failed with error %d\n",
-					ti_st_proto[i].chnl_id, err);
+					ti_st_proto[i].chnl_id, unreg_err);
+			if (!err)
+				err = unreg_err;
+		}
 	}
 
 	hst->st_write = NULL;
 	skb_queue_purge(&hst->rx_list);
 	kfree(hst);
+	if (st_release_bt_channels(ST_BT_OWNER_HCI_TTY) && !err)
+		err = -EINVAL;
 	return err;
 }
 

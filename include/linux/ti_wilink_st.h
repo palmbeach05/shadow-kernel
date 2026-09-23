@@ -91,6 +91,15 @@ struct st_proto_s {
 extern long st_register(struct st_proto_s *);
 extern long st_unregister(struct st_proto_s *);
 
+enum st_bt_owner {
+	ST_BT_OWNER_NONE,
+	ST_BT_OWNER_HCI_TTY,
+	ST_BT_OWNER_BTWILINK,
+};
+
+extern long st_claim_bt_channels(enum st_bt_owner owner);
+extern long st_release_bt_channels(enum st_bt_owner owner);
+
 
 /*
  * header information used by st_core.c
@@ -160,6 +169,7 @@ struct st_data_s {
 	struct sk_buff_head txq, tx_waitq;
 	spinlock_t lock;
 	unsigned char	protos_registered;
+	enum st_bt_owner bt_owner;
 	unsigned long ll_state;
 	void *kim_data;
 	struct tty_struct *tty;
