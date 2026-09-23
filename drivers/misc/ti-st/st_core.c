@@ -533,6 +533,79 @@ void kim_st_list_protocols(struct st_data_s *st_gdata, void *buf)
  * functions called from protocol stack drivers
  * to be EXPORT-ed
  */
+static const char *st_bt_owner_name(enum st_bt_owner owner)
+{
+	switch (owner) {
+	case ST_BT_OWNER_HCI_TTY:
+		return "hci_tty";
+	case ST_BT_OWNER_BTWILINK:
+		return "btwilink";
+	default:
+		return "none";
+	}
+}
+
+long st_claim_bt_channels(enum st_bt_owner owner)
+{
+	struct st_data_s *st_gdata;
+	unsigned long flags;
+	long err = 0;
+
+	if (owner != ST_BT_OWNER_HCI_TTY && owner != ST_BT_OWNER_BTWILINK)
+		return -EINVAL;
+
+	st_kim_ref(&st_gdata, 0);
+	if (!st_gdata)
+		return -ENODEV;
+
+	spin_lock_irqsave(&st_gdata->lock, flags);
+	if (st_gdata->bt_owner == owner) {
+		pr_err("TI ST Bluetooth channels already owned by %s",
+		       st_bt_owner_name(owner));
+		err = -EALREADY;
+	} else if (st_gdata->bt_owner != ST_BT_OWNER_NONE) {
+		pr_info("TI ST Bluetooth channels owned by %s; rejecting %s",
+			st_bt_owner_name(st_gdata->bt_owner),
+			st_bt_owner_name(owner));
+		err = -EBUSY;
+	} else {
+		st_gdata->bt_owner = owner;
+		pr_info("TI ST Bluetooth channels acquired by %s",
+			st_bt_owner_name(owner));
+	}
+	spin_unlock_irqrestore(&st_gdata->lock, flags);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(st_claim_bt_channels);
+
+long st_release_bt_channels(enum st_bt_owner owner)
+{
+	struct st_data_s *st_gdata;
+	unsigned long flags;
+	long err = 0;
+
+	st_kim_ref(&st_gdata, 0);
+	if (!st_gdata)
+		return -ENODEV;
+
+	spin_lock_irqsave(&st_gdata->lock, flags);
+	if (st_gdata->bt_owner != owner) {
+		pr_err("TI ST Bluetooth channel release by %s rejected; owner is %s",
+		       st_bt_owner_name(owner),
+		       st_bt_owner_name(st_gdata->bt_owner));
+		err = -EINVAL;
+	} else {
+		st_gdata->bt_owner = ST_BT_OWNER_NONE;
+		pr_info("TI ST Bluetooth channels released by %s",
+			st_bt_owner_name(owner));
+	}
+	spin_unlock_irqrestore(&st_gdata->lock, flags);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(st_release_bt_channels);
+
 long st_register(struct st_proto_s *new_proto)
 {
 	struct st_data_s	*st_gdata;
@@ -558,6 +631,11 @@ long st_register(struct st_proto_s *new_proto)
 
 	/* can be from process context only */
 	spin_lock_irqsave(&st_gdata->lock, flags);
+	if (st_gdata->is_registered[new_proto->chnl_id] == true) {
+		pr_err("chnl_id %d already registered", new_proto->chnl_id);
+		spin_unlock_irqrestore(&st_gdata->lock, flags);
+		return -EALREADY;
+	}
 
 	if (test_bit(ST_REG_IN_PROGRESS, &st_gdata->st_state)) {
 		pr_info(" ST_REG_IN_PROGRESS:%d ", new_proto->chnl_id);
@@ -669,6 +747,12 @@ long st_unregister(struct st_proto_s *proto)
 		pr_err(" chnl_id %d not registered", proto->chnl_id);
 		spin_unlock_irqrestore(&st_gdata->lock, flags);
 		return -EPROTONOSUPPORT;
+	}
+	if (st_gdata->list[proto->chnl_id] != proto) {
+		pr_err("chnl_id %d unregister attempted by non-owner",
+		       proto->chnl_id);
+		spin_unlock_irqrestore(&st_gdata->lock, flags);
+		return -EINVAL;
 	}
 
 	if (st_gdata->protos_registered)
