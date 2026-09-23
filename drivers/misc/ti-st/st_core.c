@@ -549,6 +549,13 @@ static const char *st_bt_owner_name(enum st_bt_owner owner)
 	}
 }
 
+/**
+ * st_claim_bt_channels - claim the shared controller for Bluetooth
+ * @owner: Bluetooth interface requesting ownership
+ *
+ * Return: 0 on success, or a negative error code if the controller cannot be
+ * claimed.
+ */
 long st_claim_bt_channels(enum st_bt_owner owner)
 {
 	struct st_data_s *st_gdata;
@@ -614,6 +621,13 @@ long st_release_bt_channels(enum st_bt_owner owner)
 }
 EXPORT_SYMBOL_GPL(st_release_bt_channels);
 
+/**
+ * st_register - register a protocol with the shared transport core
+ * @new_proto: protocol configuration and callbacks to register
+ *
+ * Return: 0 on success, -EINPROGRESS for a pending registration, or a
+ * negative error code on failure.
+ */
 long st_register(struct st_proto_s *new_proto)
 {
 	struct st_data_s	*st_gdata;
