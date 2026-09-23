@@ -149,6 +149,7 @@ extern long st_release_bt_channels(enum st_bt_owner owner);
  * @protos_registered: count of the protocols registered, also when 0 the
  *	chip enable gpio can be toggled, and when it changes to 1 the fw
  *	needs to be downloaded to initialize chip side ST.
+ * @fm_users: FM registration or shutdown in progress, excluding Bluetooth.
  * @ll_state: the various PM states the chip can be, the states are notified
  *	to us, when the chip sends relevant PM packets(SLEEP_IND, WAKE_IND).
  * @kim_data: reference to the parent encapsulating structure.
@@ -170,6 +171,7 @@ struct st_data_s {
 	spinlock_t lock;
 	unsigned char	protos_registered;
 	enum st_bt_owner bt_owner;
+	unsigned char fm_users;
 	unsigned long ll_state;
 	void *kim_data;
 	struct tty_struct *tty;
