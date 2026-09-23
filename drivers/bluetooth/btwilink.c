@@ -149,7 +149,7 @@ static int ti_st_open(struct hci_dev *hdev)
 {
 	unsigned long timeleft;
 	struct ti_st *hst;
-	int err, i;
+	int err, i, registered = 0;
 
 	BT_DBG("%s %p", hdev->name, hdev);
 
@@ -158,6 +158,11 @@ static int ti_st_open(struct hci_dev *hdev)
 
 	/* provide contexts for callbacks from ST */
 	hst = hdev->driver_data;
+	err = st_claim_bt_channels(ST_BT_OWNER_BTWILINK);
+	if (err) {
+		clear_bit(HCI_RUNNING, &hdev->flags);
+		return err;
+	}
 
 	for (i = 0; i < MAX_BT_CHNL_IDS; i++) {
 		ti_st_proto[i].priv_data = hst;
@@ -175,14 +180,16 @@ static int ti_st_open(struct hci_dev *hdev)
 		hst->reg_status = -EINPROGRESS;
 
 		err = st_register(&ti_st_proto[i]);
-		if (!err)
+		if (!err) {
+			registered++;
 			goto done;
+		}
 
 		if (err != -EINPROGRESS) {
-			clear_bit(HCI_RUNNING, &hdev->flags);
 			BT_ERR("st_register failed %d", err);
-			return err;
+			goto unreg;
 		}
+		registered++;
 
 		/* ST is busy with either protocol
 		 * registration or firmware download.
@@ -193,58 +200,70 @@ static int ti_st_open(struct hci_dev *hdev)
 			(&hst->wait_reg_completion,
 			 msecs_to_jiffies(BT_REGISTER_TIMEOUT));
 		if (!timeleft) {
-			clear_bit(HCI_RUNNING, &hdev->flags);
 			BT_ERR("Timeout(%d sec),didn't get reg "
 					"completion signal from ST",
 					BT_REGISTER_TIMEOUT / 1000);
-			return -ETIMEDOUT;
+			err = -ETIMEDOUT;
+			goto unreg;
 		}
 
 		/* Is ST registration callback
 		 * called with ERROR status? */
 		if (hst->reg_status != 0) {
-			clear_bit(HCI_RUNNING, &hdev->flags);
 			BT_ERR("ST registration completed with invalid "
 					"status %d", hst->reg_status);
-			return -EAGAIN;
+			err = -EAGAIN;
+			goto unreg;
 		}
 
 done:
 		hst->st_write = ti_st_proto[i].write;
 		if (!hst->st_write) {
 			BT_ERR("undefined ST write function");
-			clear_bit(HCI_RUNNING, &hdev->flags);
-			for (i = 0; i < MAX_BT_CHNL_IDS; i++) {
-				/* Undo registration with ST */
-				err = st_unregister(&ti_st_proto[i]);
-				if (err)
-					BT_ERR("st_unregister() failed with "
-							"error %d", err);
-				hst->st_write = NULL;
-			}
-			return -EIO;
+			err = -EIO;
+			goto unreg;
 		}
 	}
 	return 0;
+
+unreg:
+	while (registered-- > 0) {
+		int unreg_err = st_unregister(&ti_st_proto[registered]);
+
+		if (unreg_err) {
+			BT_ERR("st_unregister(%d) failed",
+			       ti_st_proto[registered].chnl_id);
+		}
+	}
+	hst->st_write = NULL;
+	st_release_bt_channels(ST_BT_OWNER_BTWILINK);
+	clear_bit(HCI_RUNNING, &hdev->flags);
+	return err;
 }
 
 /* Close device */
 static int ti_st_close(struct hci_dev *hdev)
 {
-	int err, i;
+	int err = 0, i;
 	struct ti_st *hst = hdev->driver_data;
 
 	if (!test_and_clear_bit(HCI_RUNNING, &hdev->flags))
 		return 0;
 
 	for (i = 0; i < MAX_BT_CHNL_IDS; i++) {
-		err = st_unregister(&ti_st_proto[i]);
-		if (err)
+		int unreg_err = st_unregister(&ti_st_proto[i]);
+
+		if (unreg_err) {
 			BT_ERR("st_unregister(%d) failed with error %d",
-					ti_st_proto[i].chnl_id, err);
+					ti_st_proto[i].chnl_id, unreg_err);
+			if (!err)
+				err = unreg_err;
+		}
 	}
 
 	hst->st_write = NULL;
+	if (st_release_bt_channels(ST_BT_OWNER_BTWILINK) && !err)
+		err = -EINVAL;
 
 	return err;
 }
