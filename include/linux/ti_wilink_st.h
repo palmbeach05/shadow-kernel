@@ -31,6 +31,7 @@
 #include <linux/skbuff.h>
 
 struct dentry;
+struct inode;
 
 /**
  * enum proto-type - The protocol on WiLink chips which share a
@@ -272,10 +273,11 @@ struct chip_version {
  * @core_data: ST core's data, which mainly is the tty's disc_data
  * @version: chip version available via a sysfs entry.
  * @debugfs_dir: per-device debugfs directory.
- * @debugfs_ref: references held by debugfs and its open files.
- * @debugfs_ref_complete: notified when the last debugfs reference is gone.
- * @debugfs_lock: protects debugfs_removed and reference acquisition.
- * @debugfs_removed: prevents new debugfs references during teardown.
+ * @debugfs_version_inode: identifies the version file while registered.
+ * @debugfs_protocols_inode: identifies the protocols file while registered.
+ * @debugfs_ref: device ownership and references held by open debugfs files.
+ * @debugfs_lock: serializes reads and seeks with device teardown.
+ * @debugfs_removed: rejects debugfs operations after teardown begins.
  *
  */
 struct kim_data_s {
@@ -291,8 +293,9 @@ struct kim_data_s {
 	struct st_data_s *core_data;
 	struct chip_version version;
 	struct dentry *debugfs_dir;
+	struct inode *debugfs_version_inode;
+	struct inode *debugfs_protocols_inode;
 	struct kref debugfs_ref;
-	struct completion debugfs_ref_complete;
 	struct mutex debugfs_lock;
 	bool debugfs_removed;
 	unsigned char ldisc_install;
