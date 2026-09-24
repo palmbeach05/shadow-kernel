@@ -177,6 +177,7 @@ static int_handler_prototype int_handler_table[] = {
 
 static long (*g_st_write) (struct sk_buff *skb);
 static struct completion wait_for_fmdrv_reg_comp;
+static struct st_proto_s fm_st_proto;
 
 static inline void fm_irq_call(struct fmdev *fmdev)
 {
@@ -1487,7 +1488,6 @@ static void fm_st_reg_comp_cb(void *arg, int data)
  */
 int fmc_prepare(struct fmdev *fmdev)
 {
-	static struct st_proto_s fm_st_proto;
 	int ret;
 
 	if (test_bit(FM_CORE_READY, &fmdev->flag)) {
@@ -1519,6 +1519,9 @@ int fmc_prepare(struct fmdev *fmdev)
 			fmerr("Timeout(%d sec), didn't get reg "
 					"completion signal from ST\n",
 					jiffies_to_msecs(FM_ST_REG_TIMEOUT) / 1000);
+			ret = st_unregister(&fm_st_proto);
+			if (ret < 0)
+				fmerr("st_unregister failed %d\n", ret);
 			return -ETIMEDOUT;
 		}
 		if (fmdev->streg_cbdata != 0) {
@@ -1590,7 +1593,6 @@ int fmc_prepare(struct fmdev *fmdev)
  */
 int fmc_release(struct fmdev *fmdev)
 {
-	static struct st_proto_s fm_st_proto;
 	int ret;
 
 	if (!test_bit(FM_CORE_READY, &fmdev->flag)) {
@@ -1608,9 +1610,6 @@ int fmc_release(struct fmdev *fmdev)
 
 	fmdev->resp_comp = NULL;
 	fmdev->rx.freq = 0;
-
-	memset(&fm_st_proto, 0, sizeof(fm_st_proto));
-	fm_st_proto.chnl_id = 0x08;
 
 	ret = st_unregister(&fm_st_proto);
 
