@@ -13,6 +13,14 @@ struct ti_st_radio_lock {
 static pthread_mutex_t claim_mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct ti_st_radio_lock *current_claim;
 
+/**
+ * ti_st_radio_claim - acquire the shared, nonblocking radio lock
+ * @path: persistent lock file shared by all radio clients
+ * @radio: radio requesting the claim (FM or Bluetooth)
+ * @claim: receives the owned claim on success, or NULL on failure
+ *
+ * Returns 0 on success, -EBUSY if already claimed, or another negative errno.
+ */
 int ti_st_radio_claim(const char *path, enum ti_st_radio radio,
 			struct ti_st_radio_lock **claim)
 {
@@ -59,6 +67,10 @@ fail:
 	return error;
 }
 
+/**
+ * ti_st_radio_release - release an owned claim after radio shutdown
+ * @claim: claim to release; NULL and noncurrent claims are ignored
+ */
 void ti_st_radio_release(struct ti_st_radio_lock *claim)
 {
 	if (!claim)

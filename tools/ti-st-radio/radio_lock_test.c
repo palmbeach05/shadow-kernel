@@ -7,6 +7,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+/**
+ * child_check - run a separate-process probe of the lock file
+ * @program: path to this test executable
+ * @path: shared lock file to probe
+ * @expected: expected probe exit status
+ *
+ * Returns 0 when the probe exits as expected, otherwise -1.
+ */
 static int child_check(const char *program, const char *path, int expected)
 {
 	pid_t child = fork();
@@ -21,6 +29,13 @@ static int child_check(const char *program, const char *path, int expected)
 	return WIFEXITED(status) && WEXITSTATUS(status) == expected ? 0 : -1;
 }
 
+/**
+ * main - test busy and released claims within and across processes
+ * @argc: argument count; three arguments select probe mode
+ * @argv: program name, optional "probe", and shared lock path
+ *
+ * Returns 0 when the test succeeds (or the probe sees a busy lock).
+ */
 int main(int argc, char **argv)
 {
 	char path[] = "/tmp/ti-st-radio-lock-XXXXXX";
