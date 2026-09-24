@@ -5,6 +5,22 @@ Run these checks on hardware with the FM service and Bluetooth vendor library
 integrated. The kernel checks are a final safeguard; they do not replace
 userspace arbitration before FM service binding or /dev/hci_tty opening.
 
+An atomic cross-process claim can be made with the POSIX advisory record lock
+helpers in tools/ti-st-radio. The Java FileChannel.tryLock() and the native
+fcntl(F_SETLK) helpers use the same whole-file write lock. Both callers must
+open the *same persistent inode*, at a path writable by the FM service and
+Bluetooth daemon; set its directory and file permissions in the device init
+configuration. Never delete or replace the lock file while either radio may
+run. Keep the returned claim alive from before startup through completed
+shutdown, and release it on failed startup. A failed tryClaim() or -EBUSY is
+an immediate user-visible busy failure, not a signal to poll or retry.
+
+These helpers are standalone reference code: they must be copied into and
+called by the manifest-selected FM and Bluetooth repositories. They do not
+gate either startup path until that integration and the device permissions
+are in place. POSIX process-scoped locks require callers not to open/close
+other descriptors for this lock inode while holding a claim.
+
 1. Both radios off: start FM, stop FM, start Bluetooth, stop Bluetooth.
    Each start must succeed and the next start must see an idle controller.
 2. Bluetooth to FM: while Bluetooth is starting or active, request FM.
