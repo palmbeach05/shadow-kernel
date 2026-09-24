@@ -1,0 +1,23 @@
+TI Shared Transport Bluetooth/FM arbitration manual checks
+==========================================================
+
+Run these checks on hardware with the FM service and Bluetooth vendor library
+integrated. The kernel checks are a final safeguard; they do not replace
+userspace arbitration before FM service binding or /dev/hci_tty opening.
+
+1. Both radios off: start FM, stop FM, start Bluetooth, stop Bluetooth.
+   Each start must succeed and the next start must see an idle controller.
+2. Bluetooth to FM: while Bluetooth is starting or active, request FM.
+   FM must fail without binding its service; after Bluetooth shutdown
+   completes, FM must start successfully.
+3. FM to Bluetooth: while FM is starting or active, request Bluetooth.
+   Bluetooth must fail without opening /dev/hci_tty; after FM shutdown
+   completes, Bluetooth must start successfully.
+4. Repeated starts: request either radio twice and request the other radio
+   concurrently. No second claimant may take ownership or disrupt the
+   first radio. The kernel should return -EBUSY for the conflicting radio.
+5. Failed startup recovery: cause FM or Bluetooth initialization to fail.
+   Verify that its claim is cleared and the other radio can then start.
+   Also verify that a rejected startup does not clear the first owner's
+   claim. Check kernel logs for rejected FM channel registration or
+   Bluetooth channel claims if a userspace caller bypasses arbitration.

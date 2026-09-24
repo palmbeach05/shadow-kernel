@@ -30,6 +30,8 @@
 #include <linux/ti_wilink_st.h>
 #include <linux/netdevice.h>
 
+#define ST_FM_CHANNEL 0x08
+
 /*
  * function pointer pointing to either,
  * st_kim_recv during registration to receive fw download responses
@@ -154,6 +156,8 @@ static void st_reg_complete(struct st_data_s *st_gdata, int err)
 			pr_info("protocol %d's cb sent %d\n", i, err);
 			if (err) { /* cleanup registered protocol */
 				st_gdata->is_registered[i] = false;
+				if (i == ST_FM_CHANNEL)
+					st_gdata->fm_users--;
 				if (st_gdata->protos_registered)
 					st_gdata->protos_registered--;
 			}
@@ -545,6 +549,13 @@ static const char *st_bt_owner_name(enum st_bt_owner owner)
 	}
 }
 
+/**
+ * st_claim_bt_channels - claim the shared controller for Bluetooth
+ * @owner: Bluetooth interface requesting ownership
+ *
+ * Return: 0 on success, or a negative error code if the controller cannot be
+ * claimed.
+ */
 long st_claim_bt_channels(enum st_bt_owner owner)
 {
 	struct st_data_s *st_gdata;
@@ -559,7 +570,11 @@ long st_claim_bt_channels(enum st_bt_owner owner)
 		return -ENODEV;
 
 	spin_lock_irqsave(&st_gdata->lock, flags);
-	if (st_gdata->bt_owner == owner) {
+	if (st_gdata->fm_users) {
+		pr_info("TI ST FM owns the controller; rejecting %s",
+			st_bt_owner_name(owner));
+		err = -EBUSY;
+	} else if (st_gdata->bt_owner == owner) {
 		pr_err("TI ST Bluetooth channels already owned by %s",
 		       st_bt_owner_name(owner));
 		err = -EALREADY;
@@ -606,6 +621,13 @@ long st_release_bt_channels(enum st_bt_owner owner)
 }
 EXPORT_SYMBOL_GPL(st_release_bt_channels);
 
+/**
+ * st_register - register a protocol with the shared transport core
+ * @new_proto: protocol configuration and callbacks to register
+ *
+ * Return: 0 on success, -EINPROGRESS for a pending registration, or a
+ * negative error code on failure.
+ */
 long st_register(struct st_proto_s *new_proto)
 {
 	struct st_data_s	*st_gdata;
@@ -635,6 +657,20 @@ long st_register(struct st_proto_s *new_proto)
 		pr_err("chnl_id %d already registered", new_proto->chnl_id);
 		spin_unlock_irqrestore(&st_gdata->lock, flags);
 		return -EALREADY;
+	}
+	if (new_proto->chnl_id == ST_FM_CHANNEL) {
+		if (st_gdata->bt_owner != ST_BT_OWNER_NONE) {
+			pr_info("TI ST Bluetooth owns the controller; rejecting FM");
+			spin_unlock_irqrestore(&st_gdata->lock, flags);
+			return -EBUSY;
+		}
+		st_gdata->fm_users++;
+	} else if (new_proto->chnl_id >= 0x01 &&
+		   new_proto->chnl_id <= 0x04 && st_gdata->fm_users) {
+		pr_info("TI ST FM owns the controller; rejecting Bluetooth channel %d",
+			new_proto->chnl_id);
+		spin_unlock_irqrestore(&st_gdata->lock, flags);
+		return -EBUSY;
 	}
 
 	if (test_bit(ST_REG_IN_PROGRESS, &st_gdata->st_state)) {
@@ -666,6 +702,11 @@ long st_register(struct st_proto_s *new_proto)
 		err = st_kim_start(st_gdata->kim_data);
 		if (err != 0) {
 			clear_bit(ST_REG_IN_PROGRESS, &st_gdata->st_state);
+			if (new_proto->chnl_id == ST_FM_CHANNEL) {
+				spin_lock_irqsave(&st_gdata->lock, flags);
+				st_gdata->fm_users--;
+				spin_unlock_irqrestore(&st_gdata->lock, flags);
+			}
 			if ((st_gdata->protos_registered != ST_EMPTY) &&
 			    (test_bit(ST_REG_PENDING, &st_gdata->st_state))) {
 				pr_err(" KIM failure complete callback ");
@@ -700,6 +741,8 @@ long st_register(struct st_proto_s *new_proto)
 		if (st_gdata->is_registered[new_proto->chnl_id] == true) {
 			pr_err(" proto %d already registered ",
 				   new_proto->chnl_id);
+			if (new_proto->chnl_id == ST_FM_CHANNEL)
+				st_gdata->fm_users--;
 			spin_unlock_irqrestore(&st_gdata->lock, flags);
 			return -EALREADY;
 		}
@@ -775,6 +818,11 @@ long st_unregister(struct st_proto_s *proto)
 		st_kim_stop(st_gdata->kim_data);
 		/* disable ST LL */
 		st_ll_disable(st_gdata);
+	}
+	if (proto->chnl_id == ST_FM_CHANNEL) {
+		spin_lock_irqsave(&st_gdata->lock, flags);
+		st_gdata->fm_users--;
+		spin_unlock_irqrestore(&st_gdata->lock, flags);
 	}
 	return err;
 }
