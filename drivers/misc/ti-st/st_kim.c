@@ -1066,10 +1066,10 @@ static int kim_remove(struct platform_device *pdev)
 		device_id = pdev->id;
 	else
 		device_id = 0;
-	kim_debugfs_remove(kim_gdata);
 	mutex_lock(&kim_debugfs_open_lock);
 	st_kim_devices[device_id] = NULL;
 	mutex_unlock(&kim_debugfs_open_lock);
+	kim_debugfs_remove(kim_gdata);
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 	pr_info("sysfs entries removed");
 
