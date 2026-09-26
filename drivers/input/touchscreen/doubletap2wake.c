@@ -9,7 +9,8 @@
 #include <linux/module.h>
 #include <linux/sysfs.h>
 
-#define LOGTAG "[doubletap2wake]: "
+#define DT2W_LOGTAG "[doubletap2wake]: "
+#define DT2S_LOGTAG "[doubletap2sleep]: "
 
 #define DT2W_DEFAULT 1
 #define DT2S_DEFAULT 1
@@ -34,6 +35,10 @@ static int dt2s_switch = DT2S_DEFAULT;
 
 static enum dt2w_state dt2w_state = DT2W_IDLE;
 static bool display_suspended;
+static const char *dt2w_gesture_logtag(void)
+{
+	return display_suspended ? DT2W_LOGTAG : DT2S_LOGTAG;
+}
 static int tap_start_x, tap_start_y;
 static int tap_last_x, tap_last_y;
 static int first_tap_x, first_tap_y;
@@ -133,7 +138,7 @@ static void dt2w_position(int x, int y, int x_min, int x_max,
 			dt2w_block("interval too short");
 		} else if (interval >
 			   msecs_to_jiffies(DT2W_MAX_INTERVAL_MS)) {
-			pr_info(LOGTAG "interval timeout\n");
+			pr_info("%sinterval timeout\n", dt2w_gesture_logtag());
 			dt2w_start_tap(x, y, DT2W_FIRST_TAP_DOWN);
 		} else if (dt2w_pair_too_distant(x, y)) {
 			dt2w_block("tap-pair distance too large");
@@ -166,7 +171,7 @@ static void dt2w_release(void)
 		first_tap_y = tap_last_y;
 		first_tap_release_time = now;
 		dt2w_state = DT2W_WAIT_SECOND_TAP;
-		pr_info(LOGTAG "first tap accepted\n");
+		pr_info("%sfirst tap accepted\n", dt2w_gesture_logtag());
 		break;
 	case DT2W_SECOND_TAP_DOWN:
 		if (dt2w_tap_too_long(now)) {
@@ -176,9 +181,9 @@ static void dt2w_release(void)
 		} else if (dt2w_pair_too_distant(tap_last_x, tap_last_y)) {
 			pr_info(LOGTAG "tap-pair distance too large\n");
 		} else {
-			pr_info(LOGTAG "second tap accepted\n");
+			pr_info("%ssecond tap accepted\n", dt2w_gesture_logtag());
 			touchwake_queue_power_key();
-			pr_info(LOGTAG "power key queued\n");
+			pr_info("%spower key queued\n", dt2w_gesture_logtag());
 		}
 		dt2w_reset();
 		break;
