@@ -1,0 +1,36 @@
+TI Shared Transport debugfs removal check
+=========================================
+
+Run on a device with CONFIG_TI_ST and CONFIG_DEBUG_FS enabled. Mount debugfs
+at /sys/kernel/debug if necessary. Use the actual platform device name below
+if it differs from kim.0. Stop Bluetooth and FM clients before unbinding.
+
+In terminal A, keep both debugfs files open without reading them:
+
+    exec 3</sys/kernel/debug/kim.0/version
+    exec 4</sys/kernel/debug/kim.0/protocols
+
+In terminal B, unbind the platform device while terminal A remains open:
+
+    echo kim.0 >/sys/bus/platform/drivers/kim/unbind
+
+The unbind command must return without waiting for either file to close.
+The kim.0 debugfs directory should disappear. In terminal A, try each open
+descriptor after unbind (the reads must fail, not return cached data):
+
+    cat <&3
+    cat <&4
+
+Each cat must report an error and exit nonzero. A seek followed by a read
+must also fail; if using a program that reports errno, both read and lseek
+should return ENODEV. Close the descriptors one at a time:
+
+    exec 3<&-
+    exec 4<&-
+
+With CONFIG_DEBUG_KMEMLEAK, scan /sys/kernel/debug/kmemleak after the final
+close and check that no kim_data_s allocation from kim_probe remains. For a
+direct free check, trace kim_debugfs_ref_release with a kprobe or ftrace:
+it must not run while either descriptor is open, and must run once after
+closing the second descriptor. Rebind and repeat with only protocols open,
+then only version open, to check both independent last-close paths.
