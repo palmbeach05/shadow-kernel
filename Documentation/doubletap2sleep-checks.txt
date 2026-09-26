@@ -1,0 +1,26 @@
+Double tap to sleep device checks
+=================================
+
+Use a device with the touchscreen gesture driver enabled. The controls are
+/sys/android_touch/doubletap2wake and /sys/android_touch/doubletap2sleep.
+Each accepts 0 (off) or 1 (on). Run these checks after a fresh boot, then
+repeat after changing settings at runtime.
+
+1. Read both controls. doubletap2sleep must be 0 by default. With the display
+   on, two short nearby taps must leave it on while sleep is disabled.
+2. Set doubletap2wake to 0 and doubletap2sleep to 1. Two short nearby taps
+   with the display on must turn it off. With the display off, the same
+   gesture must leave it off. Use the physical power button to wake it.
+3. Set doubletap2wake to 1 and doubletap2sleep to 0. Two short nearby taps
+   with the display off must wake it. With the display on, the same gesture
+   must leave it on.
+4. Set both controls to 1. Double tap with the display on to put it to sleep,
+   then double tap with the display off to wake it. Each gesture must cause
+   only one display transition.
+5. Set both controls to 0. Neither display state should respond to a double
+   tap. Restore the preferred wake setting when finished.
+
+Also try a single tap, a long press, a drag, and two widely separated taps
+in each enabled state; none should trigger the power key. If the touchscreen
+does not report contacts while the display is off, the wake checks require
+the device's touchscreen power configuration to be fixed first.
