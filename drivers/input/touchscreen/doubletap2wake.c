@@ -59,7 +59,7 @@ static void dt2w_block(const char *reason)
 {
 	if (dt2w_state == DT2W_BLOCKED)
 		return;
-	pr_info(LOGTAG "%s\n", reason);
+	pr_info("%s%s\n", dt2w_gesture_logtag(), reason);
 	dt2w_state = DT2W_BLOCKED;
 }
 
@@ -163,7 +163,7 @@ static void dt2w_release(void)
 	switch (dt2w_state) {
 	case DT2W_FIRST_TAP_DOWN:
 		if (dt2w_tap_too_long(now)) {
-			pr_info(LOGTAG "tap duration too long\n");
+			pr_info("%stap duration too long\n", dt2w_gesture_logtag());
 			dt2w_reset();
 			break;
 		}
@@ -175,11 +175,11 @@ static void dt2w_release(void)
 		break;
 	case DT2W_SECOND_TAP_DOWN:
 		if (dt2w_tap_too_long(now)) {
-			pr_info(LOGTAG "tap duration too long\n");
+			pr_info("%stap duration too long\n", dt2w_gesture_logtag());
 		} else if (dt2w_movement_too_large(tap_last_x, tap_last_y)) {
-			pr_info(LOGTAG "tap movement too large\n");
+			pr_info("%stap movement too large\n", dt2w_gesture_logtag());
 		} else if (dt2w_pair_too_distant(tap_last_x, tap_last_y)) {
-			pr_info(LOGTAG "tap-pair distance too large\n");
+			pr_info("%stap-pair distance too large\n", dt2w_gesture_logtag());
 		} else {
 			pr_info("%ssecond tap accepted\n", dt2w_gesture_logtag());
 			touchwake_queue_power_key();
@@ -211,7 +211,7 @@ static void dt2w_display(bool suspended)
 	display_suspended = suspended;
 	dt2w_reset();
 	if (!suspended)
-		pr_info(LOGTAG "display active\n");
+		pr_info(DT2W_LOGTAG "display active\n");
 }
 
 static void dt2w_disconnect(void)
@@ -245,7 +245,7 @@ static ssize_t dt2w_store(struct device *dev,
 		dt2w_switch = setting;
 		dt2w_reset();
 		if (!setting)
-			pr_info(LOGTAG "disabled\n");
+			pr_info(DT2W_LOGTAG "disabled\n");
 	}
 	return count;
 }
