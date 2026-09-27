@@ -96,6 +96,9 @@ struct qtouch_ts_data {
 	uint8_t				base_fw_version;
 
 	atomic_t			irq_enabled;
+	bool				irq_suspended;
+	bool				irq_wake_enabled;
+	bool				suspended;
 	int				status;
 
 	uint8_t				mode;
@@ -1483,7 +1486,6 @@ static void qtouch_ts_work_func(struct work_struct *work)
 		container_of(work, struct qtouch_ts_data, work);
 	struct qtm_obj_message *msg;
 	struct qtm_object *obj;
-	struct irq_desc *desc;
 	int ret;
 
 #ifdef CONFIG_TOUCHSCREEN_DEBUG
@@ -1496,6 +1498,8 @@ static void qtouch_ts_work_func(struct work_struct *work)
 		pr_err("%s: Cannot read message\n", __func__);
 		goto done;
 	}
+	if (qtouch_disable_touch)
+		goto done;
 
 	if ((ts->family_id == QTM_OBP_FAMILY_XMEGAT) && (ts->cal_check_flag))
 		check_chip_calibration(ts);
@@ -1516,19 +1520,9 @@ static void qtouch_ts_work_func(struct work_struct *work)
 	}
 
 done:
-    if(qtouch_disable_touch)
-	{
-		pr_err("%s: Not enabling touch\n", __func__);
-
-	}
-	else
-	{
-		/* Fix kernel warning, if we have unbalanced IRQ */
-		desc = irq_to_desc(ts->client->irq);
-		if (desc && desc->depth > 0)
-			enable_irq(ts->client->irq);
-
-	}
+	/* Release exactly the disable taken by the IRQ handler, even on a
+	 * failed read. Suspend and the sysfs switch own their own disables. */
+	enable_irq(ts->client->irq);
 }
 
 static int qtouch_set_boot_mode(struct qtouch_ts_data *ts)
@@ -1963,6 +1957,16 @@ static int qtouch_ts_remove(struct i2c_client *client)
 		del_timer(&keyarray_timer);
 
 	unregister_early_suspend(&ts->early_suspend);
+	if (ts->irq_wake_enabled)
+		disable_irq_wake(ts->client->irq);
+	/* Stop new handlers and drain work before releasing its IRQ and data. */
+	disable_irq(ts->client->irq);
+	if (cancel_work_sync(&ts->work))
+		enable_irq(ts->client->irq);
+	if (cancel_work_sync(&ts->boot_work))
+		enable_irq(ts->client->irq);
+	if (ts->irq_suspended)
+		enable_irq(ts->client->irq);
 	free_irq(ts->client->irq, ts);
 	qtouch_ts_unregister_input(ts);
 	i2c_set_clientdata(client, NULL);
@@ -1998,35 +2002,45 @@ static int qtouch_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 	if (qtouch_tsdebug & 4)
 		pr_info("%s: Suspending\n", __func__);
 
-	if (!atomic_read(&ts->irq_enabled))
+	if (ts->suspended || !atomic_read(&ts->irq_enabled))
 		return 0;
 
 	if (ts->mode == 1)
 		return -EBUSY;
 
-#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE	
-	if (s2w_switch > 0 || dt2w_switch > 0)
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+	if (s2w_switch > 0 || dt2w_switch > 0) {
+		ret = enable_irq_wake(ts->client->irq);
+		if (ret) {
+			pr_err("%s: Cannot enable touchscreen IRQ wake: %d\n",
+			       __func__, ret);
+			return ret;
+		}
+		ts->irq_wake_enabled = true;
+		ts->suspended = true;
 		return 0;
-	else
-		goto do_resume;
-#else
-	goto do_resume;
+	}
 #endif
 
-
-do_resume: 
 	disable_irq_nosync(ts->client->irq);
+	ts->irq_suspended = true;
 
 	ret = cancel_work_sync(&ts->work);
-	if (ret) { /* if work was pending disable-count is now 2 */
+	if (ret) { /* canceled work still owns the IRQ handler's disable */
 		pr_info("%s: Pending work item\n", __func__);
 		enable_irq(ts->client->irq);
 	}
 
 	ret = qtouch_power_config(ts, 0);
-	if (ret < 0)
+	if (ret < 0) {
 		pr_err("%s: Cannot write power config\n", __func__);
+		qtouch_power_config(ts, 1);
+		ts->irq_suspended = false;
+		enable_irq(ts->client->irq);
+		return ret;
+	}
 
+	ts->suspended = true;
 	return 0;
 }
 
@@ -2035,12 +2049,11 @@ static int qtouch_ts_resume(struct i2c_client *client)
 	struct qtouch_ts_data *ts = i2c_get_clientdata(client);
 	int ret;
 	int i;
-	struct irq_desc *desc;
 
 	if (qtouch_tsdebug & 4)
 		pr_info("%s: Resuming\n", __func__);
 
-	if (!atomic_read(&ts->irq_enabled))
+	if (!ts->suspended)
 		return 0;
 
 	if (ts->mode == 1)
@@ -2061,21 +2074,26 @@ static int qtouch_ts_resume(struct i2c_client *client)
 	}
 	input_sync(ts->input_dev);
 
-	ret = qtouch_power_config(ts, 1);
-	if (ret < 0) {
-		pr_err("%s: Cannot write power config\n", __func__);
-		return -EIO;
+	if (ts->irq_wake_enabled) {
+		ret = disable_irq_wake(ts->client->irq);
+		if (ret) {
+			pr_err("%s: Cannot disable touchscreen IRQ wake: %d\n",
+			       __func__, ret);
+			return ret;
+		}
+		ts->irq_wake_enabled = false;
 	}
-	qtouch_force_reset(ts, 0);
-
-	/* 
-	 * Check if this interrupt request should really be enabled
-	 * because it could be already enabled.
-	 */
-
-	desc = irq_to_desc(ts->client->irq);
-	if (desc && desc->depth > 0)
+	if (ts->irq_suspended) {
+		ret = qtouch_power_config(ts, 1);
+		if (ret < 0) {
+			pr_err("%s: Cannot write power config\n", __func__);
+			return ret;
+		}
+		qtouch_force_reset(ts, 0);
+		ts->irq_suspended = false;
 		enable_irq(ts->client->irq);
+	}
+	ts->suspended = false;
 
 	return 0;
 }
