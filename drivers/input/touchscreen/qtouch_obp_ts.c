@@ -2022,7 +2022,7 @@ static int qtouch_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 	}
 #endif
 
-	disable_irq_nosync(ts->client->irq);
+	disable_irq(ts->client->irq);
 	ts->irq_suspended = true;
 
 	ret = cancel_work_sync(&ts->work);
