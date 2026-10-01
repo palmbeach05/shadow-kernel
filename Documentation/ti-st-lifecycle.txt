@@ -10,7 +10,8 @@ those functions with scripted completion, firmware and hardware stubs. It
 checks positive installation completion, installation timeout and signals,
 firmware errors and signals, cleanup errors, retry exhaustion, recovery on a
 later attempt, and normalized stop results. Every failed attempt must clean
-up; interrupted startup must return its original error after one attempt.
+up; an interruption during startup or cleanup prevents another power-on
+attempt, while the original startup error is preserved.
 Stop must shut down GPIO and call chip_disable even when its wait fails.
 The existing bound is one initial attempt plus POR_RETRY_COUNT retries.
 These checks do not exercise real UART, GPIO, sysfs or completion timing.
@@ -39,7 +40,8 @@ Manual device checks (not performed by the host test):
 5. Withhold or interrupt uninstall acknowledgement, both during failed startup
    and last-channel shutdown. Verify timeout/interruption reporting, separate
    cleanup diagnostics, GPIO shutdown and platform disable in every case.
-   A cleanup error must not replace the original startup failure.
+   A cleanup error must not replace the original startup failure. Interrupted
+   cleanup after failed startup must prevent another power-on attempt.
 
 Base inspection used the locally available 2.6.32.9 ref at
 f203766b26338d3fb60cc74ba7f346a99135cd1f, including st_kim.c, st_core.c and
