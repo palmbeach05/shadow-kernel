@@ -79,7 +79,8 @@ int main(void) {
  check(1, -EINTR, -ERESTARTSYS, 0, -EINTR, 1, 1, 1);
  check(1, -EIO, 1, 0, -EIO, 6, 6, 6);
  check(1, -EINVAL, 0, 0, -EINVAL, 6, 6, 6);
- check(1, -ETIMEDOUT, -ERESTARTSYS, 0, -ETIMEDOUT, 6, 6, 6);
+ check(1, -ETIMEDOUT, -ERESTARTSYS, 0, -ETIMEDOUT, 1, 1, 1);
+ check(1, -ETIMEDOUT, -EINTR, 0, -ETIMEDOUT, 1, 1, 1);
  check(1, -EIO, 1, 3, 0, 3, 3, 2);
  /* Exercise stop independently for each completion result. */
  {

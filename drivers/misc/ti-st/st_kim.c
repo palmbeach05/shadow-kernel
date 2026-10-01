@@ -613,7 +613,8 @@ long st_kim_start(void *kim_data)
 			pr_err("startup cleanup failed: %ld", stop_err);
 
 		/* A signaled wait must not start another power-on attempt. */
-		if (err == -ERESTARTSYS || err == -EINTR)
+		if (err == -ERESTARTSYS || err == -EINTR ||
+		    stop_err == -ERESTARTSYS || stop_err == -EINTR)
 			return err;
 	} while (retry--);
 	return err;
