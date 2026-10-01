@@ -1,0 +1,50 @@
+TI Shared Transport startup and shutdown validation
+===================================================
+
+Run the host regression checks from the repository root:
+
+    python3 tools/ti-st/kim_lifecycle_test.py
+
+The test extracts st_kim_start() and st_kim_stop() from st_kim.c and compiles
+those functions with scripted completion, firmware and hardware stubs. It
+checks positive installation completion, installation timeout and signals,
+firmware errors and signals, cleanup errors, retry exhaustion, recovery on a
+later attempt, and normalized stop results. Every failed attempt must clean
+up; interrupted startup must return its original error after one attempt.
+Stop must shut down GPIO and call chip_disable even when its wait fails.
+The existing bound is one initial attempt plus POR_RETRY_COUNT retries.
+These checks do not exercise real UART, GPIO, sysfs or completion timing.
+
+Source review of st_register() and st_unregister() confirms that registration
+returns the startup error and pending registrations receive that error through
+st_reg_complete(). Last-channel unregistration returns the stop error while
+still disabling the low-level transport and releasing FM accounting.
+read_local_version() and the BTS event wait preserve negative wait results.
+Firmware selection and Bluetooth configuration are unchanged by this fix.
+
+Manual device checks (not performed by the host test):
+
+1. With UIM running, start a configured radio and verify line-discipline
+   installation precedes firmware commands. Successful registration and
+   last-channel unregistration must return zero.
+2. Withhold UIM installation acknowledgement. Verify -ETIMEDOUT after the
+   bounded attempts, no firmware commands, uninstall notification on each
+   failed attempt, and a final low nShutdown GPIO.
+3. Interrupt the registering task during installation, version response and
+   BTS event waits. Verify the interruption error survives cleanup, no further
+   startup attempt occurs, and platform shutdown runs.
+4. Remove firmware or inject a UART/firmware response failure. Verify cleanup
+   and bounded retries; successful uninstall must not turn startup into
+   success. Restore firmware and verify a subsequent start succeeds.
+5. Withhold or interrupt uninstall acknowledgement, both during failed startup
+   and last-channel shutdown. Verify timeout/interruption reporting, separate
+   cleanup diagnostics, GPIO shutdown and platform disable in every case.
+   A cleanup error must not replace the original startup failure.
+
+Base inspection used the locally available 2.6.32.9 ref at
+f203766b26338d3fb60cc74ba7f346a99135cd1f, including st_kim.c, st_core.c and
+ti_wilink_st.h. Its startup/stop control flow matches the checkout before
+this fix. No remote query was performed, so freshness of that ref is unknown.
+The focused follow-up is intended for 2.6.32.9; existing revision branches
+need separate propagation after acceptance. No device testing or battery
+measurements are implied by these host checks.

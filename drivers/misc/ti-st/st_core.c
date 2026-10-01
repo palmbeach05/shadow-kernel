@@ -715,7 +715,7 @@ long st_register(struct st_proto_s *new_proto)
 				spin_unlock_irqrestore(&st_gdata->lock, flags);
 				clear_bit(ST_REG_PENDING, &st_gdata->st_state);
 			}
-			return -EINVAL;
+			return err;
 		}
 
 		spin_lock_irqsave(&st_gdata->lock, flags);
@@ -815,7 +815,7 @@ long st_unregister(struct st_proto_s *proto)
 		}
 
 		/* all chnl_ids now unregistered */
-		st_kim_stop(st_gdata->kim_data);
+		err = st_kim_stop(st_gdata->kim_data);
 		/* disable ST LL */
 		st_ll_disable(st_gdata);
 	}
