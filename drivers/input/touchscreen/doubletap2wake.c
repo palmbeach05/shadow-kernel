@@ -9,11 +9,9 @@
 #include <linux/module.h>
 #include <linux/sysfs.h>
 
-#define DT2W_LOGTAG "[doubletap2wake]: "
-#define DT2S_LOGTAG "[doubletap2sleep]: "
+#define LOGTAG "[doubletap2wake]: "
 
 #define DT2W_DEFAULT 1
-#define DT2S_DEFAULT 1
 #define DT2W_MAX_TAP_DURATION_MS 250
 #define DT2W_MIN_INTERVAL_MS 50
 #define DT2W_MAX_INTERVAL_MS 500
@@ -31,14 +29,9 @@ enum dt2w_state {
 extern struct kobject *android_touch_kobj;
 
 int dt2w_switch = DT2W_DEFAULT;
-static int dt2s_switch = DT2S_DEFAULT;
 
 static enum dt2w_state dt2w_state = DT2W_IDLE;
 static bool display_suspended;
-static const char *dt2w_gesture_logtag(void)
-{
-	return display_suspended ? DT2W_LOGTAG : DT2S_LOGTAG;
-}
 static int tap_start_x, tap_start_y;
 static int tap_last_x, tap_last_y;
 static int first_tap_x, first_tap_y;
@@ -50,16 +43,11 @@ static void dt2w_reset(void)
 	dt2w_state = DT2W_IDLE;
 }
 
-static bool dt2w_enabled_for_display(void)
-{
-	return display_suspended ? dt2w_switch : dt2s_switch;
-}
-
 static void dt2w_block(const char *reason)
 {
 	if (dt2w_state == DT2W_BLOCKED)
 		return;
-	pr_info("%s%s\n", dt2w_gesture_logtag(), reason);
+	pr_info(LOGTAG "%s\n", reason);
 	dt2w_state = DT2W_BLOCKED;
 }
 
@@ -112,9 +100,14 @@ static void dt2w_position(int x, int y, int x_min, int x_max,
 	touch_y_min = y_min;
 	touch_y_max = y_max;
 
-	if (!dt2w_enabled_for_display()) {
+	if (!dt2w_switch) {
 		if (dt2w_state != DT2W_BLOCKED)
 			dt2w_block("disabled");
+		return;
+	}
+	if (!display_suspended) {
+		if (dt2w_state != DT2W_BLOCKED)
+			dt2w_block("display active");
 		return;
 	}
 
@@ -138,7 +131,7 @@ static void dt2w_position(int x, int y, int x_min, int x_max,
 			dt2w_block("interval too short");
 		} else if (interval >
 			   msecs_to_jiffies(DT2W_MAX_INTERVAL_MS)) {
-			pr_info("%sinterval timeout\n", dt2w_gesture_logtag());
+			pr_info(LOGTAG "interval timeout\n");
 			dt2w_start_tap(x, y, DT2W_FIRST_TAP_DOWN);
 		} else if (dt2w_pair_too_distant(x, y)) {
 			dt2w_block("tap-pair distance too large");
@@ -155,15 +148,10 @@ static void dt2w_release(void)
 {
 	unsigned long now = jiffies;
 
-	if (!dt2w_enabled_for_display()) {
-		dt2w_reset();
-		return;
-	}
-
 	switch (dt2w_state) {
 	case DT2W_FIRST_TAP_DOWN:
 		if (dt2w_tap_too_long(now)) {
-			pr_info("%stap duration too long\n", dt2w_gesture_logtag());
+			pr_info(LOGTAG "tap duration too long\n");
 			dt2w_reset();
 			break;
 		}
@@ -171,19 +159,19 @@ static void dt2w_release(void)
 		first_tap_y = tap_last_y;
 		first_tap_release_time = now;
 		dt2w_state = DT2W_WAIT_SECOND_TAP;
-		pr_info("%sfirst tap accepted\n", dt2w_gesture_logtag());
+		pr_info(LOGTAG "first tap accepted\n");
 		break;
 	case DT2W_SECOND_TAP_DOWN:
 		if (dt2w_tap_too_long(now)) {
-			pr_info("%stap duration too long\n", dt2w_gesture_logtag());
+			pr_info(LOGTAG "tap duration too long\n");
 		} else if (dt2w_movement_too_large(tap_last_x, tap_last_y)) {
-			pr_info("%stap movement too large\n", dt2w_gesture_logtag());
+			pr_info(LOGTAG "tap movement too large\n");
 		} else if (dt2w_pair_too_distant(tap_last_x, tap_last_y)) {
-			pr_info("%stap-pair distance too large\n", dt2w_gesture_logtag());
+			pr_info(LOGTAG "tap-pair distance too large\n");
 		} else {
-			pr_info("%ssecond tap accepted\n", dt2w_gesture_logtag());
+			pr_info(LOGTAG "second tap accepted\n");
 			touchwake_queue_power_key();
-			pr_info("%spower key queued\n", dt2w_gesture_logtag());
+			pr_info(LOGTAG "power key queued\n");
 		}
 		dt2w_reset();
 		break;
@@ -211,7 +199,7 @@ static void dt2w_display(bool suspended)
 	display_suspended = suspended;
 	dt2w_reset();
 	if (!suspended)
-		pr_info(DT2W_LOGTAG "display active\n");
+		pr_info(LOGTAG "display active\n");
 }
 
 static void dt2w_disconnect(void)
@@ -245,34 +233,12 @@ static ssize_t dt2w_store(struct device *dev,
 		dt2w_switch = setting;
 		dt2w_reset();
 		if (!setting)
-			pr_info(DT2W_LOGTAG "disabled\n");
+			pr_info(LOGTAG "disabled\n");
 	}
 	return count;
 }
 static DEVICE_ATTR(doubletap2wake, S_IWUSR | S_IRUGO,
 		dt2w_show, dt2w_store);
-
-static ssize_t dt2s_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d\n", dt2s_switch);
-}
-
-static ssize_t dt2s_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	unsigned long setting;
-
-	if (strict_strtoul(buf, 10, &setting) || setting > 1)
-		return -EINVAL;
-	if (dt2s_switch != setting) {
-		dt2s_switch = setting;
-		dt2w_reset();
-	}
-	return count;
-}
-static DEVICE_ATTR(doubletap2sleep, S_IWUSR | S_IRUGO,
-		dt2s_show, dt2s_store);
 
 static int __init doubletap2wake_init(void)
 {
@@ -289,14 +255,8 @@ static int __init doubletap2wake_init(void)
 				  &dev_attr_doubletap2wake.attr);
 	if (error)
 		goto err_client;
-	error = sysfs_create_file(android_touch_kobj,
-				  &dev_attr_doubletap2sleep.attr);
-	if (error)
-		goto err_wake;
 	return 0;
 
-err_wake:
-	sysfs_remove_file(android_touch_kobj, &dev_attr_doubletap2wake.attr);
 err_client:
 	touchwake_unregister_client(&dt2w_client);
 	return error;
@@ -304,7 +264,6 @@ err_client:
 
 static void __exit doubletap2wake_exit(void)
 {
-	sysfs_remove_file(android_touch_kobj, &dev_attr_doubletap2sleep.attr);
 	sysfs_remove_file(android_touch_kobj, &dev_attr_doubletap2wake.attr);
 	touchwake_unregister_client(&dt2w_client);
 }
@@ -312,5 +271,5 @@ static void __exit doubletap2wake_exit(void)
 module_init(doubletap2wake_init);
 module_exit(doubletap2wake_exit);
 
-MODULE_DESCRIPTION("Double tap to wake and sleep gestures");
+MODULE_DESCRIPTION("Double tap to wake gesture");
 MODULE_LICENSE("GPL v2");
