@@ -254,7 +254,7 @@ static long read_local_version(struct kim_data_s *kim_gdata, char *bts_scr_name)
 		&kim_gdata->kim_rcvd, msecs_to_jiffies(CMD_RESP_TIME));
 	if (time_left <= 0) {
 		pr_err(" waiting for ver info- timed out or received signal");
-		return time_left ? -ERESTARTSYS : -ETIMEDOUT;
+		return time_left ? time_left : -ETIMEDOUT;
 	}
 	reinit_completion(&kim_gdata->kim_rcvd);
 	/*
@@ -500,7 +500,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			if (err <= 0) {
 				pr_err("response timeout/signaled during fw download ");
 				/* timed out */
-				err = err ? -ERESTARTSYS : -ETIMEDOUT;
+				err = err ? err : -ETIMEDOUT;
 				goto release_firmware;
 			}
 			reinit_completion(&kim_gdata->kim_rcvd);
@@ -568,7 +568,7 @@ void st_kim_complete(void *kim_data)
  */
 long st_kim_start(void *kim_data)
 {
-	long err = 0;
+	long err, stop_err;
 	long retry = POR_RETRY_COUNT;
 	struct ti_st_plat_data	*pdata;
 	struct kim_data_s	*kim_gdata = (struct kim_data_s *)kim_data;
@@ -596,30 +596,26 @@ long st_kim_start(void *kim_data)
 		/* wait for ldisc to be installed */
 		err = wait_for_completion_interruptible_timeout(
 			&kim_gdata->ldisc_installed, msecs_to_jiffies(LDISC_TIME));
-		if (!err) {
-			/*
-			 * ldisc installation timeout,
-			 * flush uart, power cycle BT_EN
-			 */
-			pr_err("ldisc installation timeout");
-			err = st_kim_stop(kim_gdata);
-			continue;
-		} else {
-			/* ldisc installed now */
+		if (err > 0) {
 			pr_info("line discipline installed");
 			err = download_firmware(kim_gdata);
-			if (err != 0) {
-				/*
-				 * ldisc installed but fw download failed,
-				 * flush uart & power cycle BT_EN
-				 */
-				pr_err("download firmware failed");
-				err = st_kim_stop(kim_gdata);
-				continue;
-			} else {	/* on success don't retry */
-				break;
-			}
+			if (!err)
+				return 0;
+			pr_err("download firmware failed: %ld", err);
+		} else if (!err) {
+			pr_err("ldisc installation timeout");
+			err = -ETIMEDOUT;
 		}
+
+		/* Flush UART and power down without losing the startup error. */
+		stop_err = st_kim_stop(kim_gdata);
+		if (stop_err)
+			pr_err("startup cleanup failed: %ld", stop_err);
+
+		/* A signaled wait must not start another power-on attempt. */
+		if (err == -ERESTARTSYS || err == -EINTR ||
+		    stop_err == -ERESTARTSYS || stop_err == -EINTR)
+			return err;
 	} while (retry--);
 	return err;
 }
@@ -661,6 +657,8 @@ long st_kim_stop(void *kim_data)
 	if (!err) {		/* timeout */
 		pr_err(" timed out waiting for ldisc to be un-installed");
 		err = -ETIMEDOUT;
+	} else if (err > 0) {
+		err = 0;
 	}
 
 	/* By default configure BT nShutdown to LOW state */
