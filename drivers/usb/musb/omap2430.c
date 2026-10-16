@@ -296,7 +296,8 @@ int __init musb_platform_init(struct musb *musb)
 
 #if defined(CONFIG_PM) && defined(CONFIG_ARCH_OMAP3430)
 	/* OMAP2430 retention and PHY sequencing need separate validation. */
-	if (cpu_is_omap3430()) {
+	if (cpu_is_omap3430() || cpu_is_omap3630()) {
+		mutex_init(&musb->omap_context.cpcap_lock);
 		musb->pm_prepare = omap_musb_pm_prepare;
 		musb->pm_suspend = omap_musb_pm_suspend;
 		musb->pm_resume = omap_musb_pm_resume;
@@ -338,10 +339,27 @@ int musb_platform_suspend(struct musb *musb)
 /* All four callbacks run in the regular (sleepable) system PM phase. */
 static int omap_musb_pm_prepare(struct musb *musb)
 {
+	unsigned long flags;
+
+	/* Wait for the whole cable callback, including unlocked givebacks. */
+	mutex_lock(&musb->omap_context.cpcap_lock);
+	spin_lock_irqsave(&musb->lock, flags);
 	/* A failed resume must be retried before another context save. */
-	if (musb->omap_context.quiesced)
+	if (musb->omap_context.quiesced) {
+		spin_unlock_irqrestore(&musb->lock, flags);
+		mutex_unlock(&musb->omap_context.cpcap_lock);
 		return -EBUSY;
+	}
+	/* OMAP36xx supports only 12-pin SDR ULPI (SWPU177AA 22.1.5.1). */
+	if (cpu_is_omap3630() &&
+			(omap_readl(OTG_INTERFSEL) & 3) != ULPI_12PIN) {
+		spin_unlock_irqrestore(&musb->lock, flags);
+		mutex_unlock(&musb->omap_context.cpcap_lock);
+		return -EINVAL;
+	}
 	musb->omap_context.quiesced = 1;
+	spin_unlock_irqrestore(&musb->lock, flags);
+	mutex_unlock(&musb->omap_context.cpcap_lock);
 	/* Neither interrupts nor timers may touch an unclocked core. */
 	disable_irq(musb->nIrq);
 	musb->omap_context.dma_irq = 0;
@@ -357,16 +375,20 @@ static int omap_musb_pm_prepare(struct musb *musb)
 	}
 #endif
 #ifdef CONFIG_USB_MUSB_OTG
-	musb->omap_context.otg_expires = musb->otg_timer.expires;
 	musb->omap_context.otg_pending = del_timer_sync(&musb->otg_timer);
+	musb->omap_context.otg_expires = musb->otg_timer.expires;
 #endif
-	musb->omap_context.idle_expires = musb_idle_timer.expires;
 	musb->omap_context.idle_pending = del_timer_sync(&musb_idle_timer);
+	musb->omap_context.idle_expires = musb_idle_timer.expires;
 	return 0;
 }
 
 static void omap_musb_pm_complete(struct musb *musb)
 {
+	unsigned long flags;
+
+	mutex_lock(&musb->omap_context.cpcap_lock);
+	spin_lock_irqsave(&musb->lock, flags);
 #ifdef CONFIG_USB_MUSB_OTG
 	if (musb->omap_context.otg_pending) {
 		mod_timer(&musb->otg_timer,
@@ -381,28 +403,48 @@ static void omap_musb_pm_complete(struct musb *musb)
 			musb->omap_context.idle_expires : jiffies + 1);
 		musb->omap_context.idle_pending = 0;
 	}
+	musb->omap_context.quiesced = 0;
+#ifdef CONFIG_USB_GADGET_MUSB_HDRC
+	musb_cpcap_resume(musb);
+#endif
+	spin_unlock_irqrestore(&musb->lock, flags);
+	mutex_unlock(&musb->omap_context.cpcap_lock);
 	if (musb->omap_context.dma_irq)
 		enable_irq(musb->omap_context.dma_irq);
 	enable_irq(musb->nIrq);
-	musb->omap_context.quiesced = 0;
 }
 
-static void omap_musb_restore_wrapper(struct musb *musb)
+static int omap_musb_restore_wrapper(struct musb *musb)
 {
 	u32 sysconfig = musb->omap_context.sysconfig;
+	u32 interfsel = omap_readl(OTG_INTERFSEL) & 3;
 
-	/* SPRUF98Y 23.1.5.4: release force before changing idle modes.
+	/* CPCAP's callback cannot stop the external 60 MHz clock.  The
+	 * supported OMAP3630 selection also matches its reset value.  Fail
+	 * closed on a mismatch rather than switch interfaces with FCLK on.
+	 */
+	if (cpu_is_omap3630() && interfsel != musb->omap_context.interfsel)
+		return -EIO;
+
+	/* SPRUF98Y 23.1.5.4 / SWPU177AA 22.1.5.4: release force first.
 	 * Do not enable AUTOIDLE in the same write as smart-idle.
-	 * Keep the existing OMAP3430 AUTOIDLE workaround/policy.
+	 * Replay each CPU's saved AUTOIDLE policy (3430 workaround included).
 	 */
 	omap_writel(0, OTG_FORCESTDBY);
 	omap_writel(NOSTDBY | NOIDLE, OTG_SYSCONFIG);
-	omap_writel(musb->omap_context.interfsel, OTG_INTERFSEL);
+	/* SWPU177AA 22.1.4.3.1 forbids changing PHYSEL with FCLK running.
+	 * OMAP3630 resets to 12-pin ULPI already; leave a matching value alone.
+	 */
+	if (interfsel != musb->omap_context.interfsel)
+		omap_writel(musb->omap_context.interfsel, OTG_INTERFSEL);
+	if (cpu_is_omap3630())
+		omap_writel(musb->omap_context.bigendian, OTG_BIGENDIAN);
 	omap_writel(sysconfig & ~AUTOIDLE, OTG_SYSCONFIG);
 	omap_writel(musb->omap_context.forcestandby, OTG_FORCESTDBY);
 	omap_writel(sysconfig, OTG_SYSCONFIG);
 	/* Flush posted wrapper writes before any Mentor core accesses. */
 	omap_readl(OTG_SYSCONFIG);
+	return 0;
 }
 
 static int omap_musb_pm_resume(struct musb *musb)
@@ -422,11 +464,16 @@ static int omap_musb_pm_resume(struct musb *musb)
 		musb->omap_context.clock_off = 0;
 	}
 
-	omap_musb_restore_wrapper(musb);
+	ret = omap_musb_restore_wrapper(musb);
+	if (ret)
+		goto cleanup;
 	/* TWL4030 restores power, PHY clock and ULPI mode over I2C.
-	 * This must finish before the core context is restored.
+	 * CPCAP retains its board-managed configuration: its callback is a
+	 * no-op.  Do not reset it or duplicate cpcap-usb-det's VUSB ownership.
+	 * The callback must finish before the core context is restored.
 	 */
 	ret = otg_set_suspend(musb->xceiv, 0);
+cleanup:
 	if (ret) {
 		/* Leave the IRQ/timer quiesced and release our clock reference.
 		 * A later retry must not enable an already enabled clock.
@@ -456,6 +503,9 @@ static int omap_musb_pm_suspend(struct musb *musb)
 	musb->omap_context.sysconfig = omap_readl(OTG_SYSCONFIG) & ~SOFTRST;
 	musb->omap_context.interfsel = omap_readl(OTG_INTERFSEL) & 3;
 	musb->omap_context.forcestandby = omap_readl(OTG_FORCESTDBY) & ENABLEFORCE;
+	if (cpu_is_omap3630())
+		musb->omap_context.bigendian =
+			omap_readl(OTG_BIGENDIAN) & BIGENDIAN;
 
 	omap_writel(ENABLEFORCE, OTG_FORCESTDBY);
 	omap_writel(musb->omap_context.sysconfig | ENABLEWAKEUP,

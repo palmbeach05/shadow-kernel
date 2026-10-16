@@ -1551,9 +1551,9 @@ static void musb_pullup(struct musb *musb, int is_on)
 	}
 }
 
-void cpcap_musb_notifier_call(unsigned char event)
+/* Caller holds musb->lock with IRQs blocked. */
+static void musb_cpcap_event(struct musb *musb, unsigned char event)
 {
- 	struct musb *musb = g_musb;
 	u8 power;
 	u32 stdby;
 	u32 reg;
@@ -1608,6 +1608,61 @@ void cpcap_musb_notifier_call(unsigned char event)
 		cpcap_usb = (event == 1);
 		musb_pullup(musb,1);
 	}
+}
+
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_OMAP3430)
+/* Called after wrapper/PHY/core restoration, with the controller locked. */
+void musb_cpcap_resume(struct musb *musb)
+{
+	if (musb->omap_context.cpcap_pending) {
+		unsigned char event = musb->omap_context.cpcap_event;
+		int disconnected = musb->omap_context.cpcap_disconnected;
+
+		musb->omap_context.cpcap_pending = 0;
+		musb->omap_context.cpcap_disconnected = 0;
+		/* Preserve a disconnect before a later reconnect/role change. */
+		if (disconnected && event != 0)
+			musb_cpcap_event(musb, 0);
+		musb_cpcap_event(musb, event);
+	}
+}
+#endif
+
+void cpcap_musb_notifier_call(unsigned char event)
+{
+	struct musb *musb = g_musb;
+	unsigned long flags;
+
+	if (!musb)
+		return;
+
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_OMAP3430)
+	/* Detection work is sleepable.  Keep PM out of unlocked givebacks. */
+	if (musb->pm_prepare)
+		mutex_lock(&musb->omap_context.cpcap_lock);
+#endif
+	spin_lock_irqsave(&musb->lock, flags);
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_OMAP3430)
+	if (musb->pm_prepare && musb->omap_context.quiesced) {
+		/* Cable detection owns PHY power; defer only the controller MMIO.
+		 * Keep a disconnect as well as the final cable state so an old
+		 * host session is torn down before a reconnect/role change.
+		 */
+		musb->omap_context.cpcap_event = event;
+		musb->omap_context.cpcap_pending = 1;
+		if (event == 0)
+			musb->omap_context.cpcap_disconnected = 1;
+		spin_unlock_irqrestore(&musb->lock, flags);
+		mutex_unlock(&musb->omap_context.cpcap_lock);
+		return;
+	}
+#endif
+	musb_cpcap_event(musb, event);
+	spin_unlock_irqrestore(&musb->lock, flags);
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_OMAP3430)
+	if (musb->pm_prepare)
+		mutex_unlock(&musb->omap_context.cpcap_lock);
+#endif
 }
 
 #if 0
