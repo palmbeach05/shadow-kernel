@@ -313,6 +313,31 @@ static inline struct usb_request *next_out_request(struct musb_hw_ep *hw_ep)
 #endif
 }
 
+#ifdef CONFIG_PM
+/* Core register context; wrapper and PHY state belongs to the platform. */
+struct musb_csr_regs {
+	u16 txmaxp, txcsr, rxmaxp, rxcsr;
+#ifndef CONFIG_BLACKFIN
+	u16 txfifoadd, rxfifoadd;
+	u8 txfifosz, rxfifosz;
+#endif
+#ifdef CONFIG_USB_MUSB_HDRC_HCD
+	u8 txtype, txinterval, rxtype, rxinterval;
+#ifndef CONFIG_BLACKFIN
+	u8 txfunaddr, txhubaddr, txhubport;
+	u8 rxfunaddr, rxhubaddr, rxhubport;
+#endif
+#endif
+};
+
+struct musb_context_registers {
+	u8 faddr, power, intrusbe;
+	u16 intrtxe, intrrxe;
+	u8 index, testmode, devctl;
+	struct musb_csr_regs index_regs[MUSB_C_NUM_EPS];
+};
+#endif
+
 /*
  * struct musb - Driver instance data.
  */
@@ -320,6 +345,9 @@ struct musb {
 	/* device lock */
 	spinlock_t		lock;
 	struct clk		*clock;
+#ifdef CONFIG_PM
+	struct musb_context_registers context;
+#endif
 	irqreturn_t		(*isr)(int, void *);
 	struct work_struct	irq_work;
 #define MUSB_HWVERS_MAJOR(x)    ((x >> 10) & 0x1f)

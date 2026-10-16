@@ -1,0 +1,94 @@
+MUSB core suspend/resume context backport
+========================================
+
+Implementation reference
+------------------------
+The context layout and save/restore coverage are adapted from Linux v2.6.39:
+https://github.com/torvalds/linux/blob/v2.6.39/drivers/usb/musb/musb_core.c
+https://github.com/torvalds/linux/blob/v2.6.39/drivers/usb/musb/musb_core.h
+
+This is an adaptation to 2.6.32.44, not a direct application of stable commit
+262e2d9d559334e09bc80516132ea99d82f97b8c.  The local tree uses
+musb->config->dyn_fifo and has no upstream FIFO/target read helpers or ULPI
+bus-control accessor.  Reads therefore use this tree's register definitions.
+FRAME is a read-only frame counter and is not restored.  FADDR is included
+for peripheral and single-point host operation.  Host type, interval and
+multipoint target state is guarded by CONFIG_USB_MUSB_HDRC_HCD; Blackfin's
+fixed FIFOs and absent multipoint registers are excluded at compile time.
+
+Only initialized, configured endpoints are visited, bounded by nr_endpoints
+and MUSB_C_NUM_EPS.  EP0 uses CSR0 and host TYPE0/NAKLIMIT0, without accessing
+its reserved nonzero-endpoint registers.  Both helpers explicitly select
+INDEX, including on flat-register platforms where FIFO setup remains indexed,
+and restore the pre-suspend INDEX after their loops.  Dynamic FIFO size and
+address state includes double-buffer configuration.  Static FIFO layout is
+hardware-defined and is not written.
+
+Save runs under the existing lock before clock disable.  Restore runs in
+resume_noirq only after set_clock/clk_enable succeeds.  The existing clock
+failure return is retained, so failure performs no core register accesses.
+FIFO layout and host routing precede endpoint CSR restoration; controller
+interrupt enables are restored last.  musb_dma_completion is unchanged.
+
+Platform dependencies and limitations
+------------------------------------
+The existing core PM callbacks only gate clocks; they do not invoke
+musb_platform_suspend/resume.  In omap2430.c those helpers are used during
+platform initialization/exit and also own clock and transceiver operations.
+Calling them from the core PM callbacks would duplicate clock operations,
+including the OMAP set_clock callback's already-enabled error case.
+
+Core restore relies on the existing clock-enabled platform mapping being
+accessible, with the OMAP wrapper and transceiver still configured.  If a
+platform suspend path is added, core save must precede platform suspend;
+platform resume must make register access ready before core restore, with
+clock errors still propagated.  Transceiver callbacks must also be checked
+for suitability in the noirq phase before moving any PHY work there.
+
+Actual OMAP off-mode can lose OTG_SYSCONFIG and OTG_INTERFSEL (ULPI selection),
+and may require OTG_FORCESTDBY handling and external transceiver/ULPI state
+recovery.  omap2430.c sets ENABLEFORCE on platform suspend, while its matching
+clear on resume is disabled with #if 0.  This backport does not repair that
+platform path or save wrapper/PHY state.  Platform-specific restoration must
+establish wrapper access, interface selection and PHY readiness before core
+MMIO after context loss.  The core backport alone is not complete OMAP
+off-mode support.  FIFO contents, DMA engine state and wrapper-specific state
+on other platforms (including TUSB6010) are also outside this context image.
+
+Validation record
+-----------------
+Completed in the inspection environment:
+- AST outlines of musb_core.h, musb_core.c and omap2430.c before source review.
+- Static preprocessor/AST checks of the added structures and helpers with PM
+  on/off, host support on/off, and normal, Blackfin and TUSB6010 register
+  guards (12 combinations).  Checked register macro availability and matching
+  saved/restored fields.  These checks are not kernel compilation or tests
+  of register behavior.
+- Static review of endpoint bounds, INDEX selection/restoration, FIFO and
+  interrupt ordering, and the clock-enable failure path.
+- Verified musb_dma_completion and existing OMAP clock error handling remain
+  unchanged; git diff --check passed.
+
+No repository code was executed.  No kernel builds or hardware tests were
+run.  Required follow-up with a suitable toolchain and target configuration:
+- Build OMAP2430 and OMAP3430/OMAP34XX host-only, peripheral-only and OTG
+  configurations with CONFIG_PM=y, plus host/peripheral CONFIG_PM=n builds.
+  Cover CONFIG_MUSB_PIO_ONLY and CONFIG_USB_INVENTRA_DMA where supported.
+- Build DaVinci static FIFO and TUSB6010 dynamic FIFO configurations, and
+  Blackfin fixed FIFO configurations, with host/peripheral and PM guards.
+  Full builds may expose pre-existing issues: without CONFIG_HAVE_CLK the
+  local clk_enable stub expands to a statement, whereas the inherited
+  resume error handling assigns its result.  This unrelated stub is unchanged.
+- Check normal host enumeration and transfers, including a downstream hub
+  for multipoint routing, and peripheral enumeration and data transfers.
+  Exercise OTG roles, supported speeds, endpoint directions, PIO and DMA.
+- Repeat suspend/resume with a connected device, disconnected cable and idle
+  controller; check transfers afterward, wakeup where supported, interrupt
+  behavior, nonzero INDEX preservation, FIFO layout and clock balance.
+  Inject clock-enable failure and confirm its error reaches the PM caller
+  without register accesses, then check recovery on a later successful resume.
+- Separately force real off-mode context loss and verify it occurred using
+  platform power-state evidence.  Check wrapper, PHY, core and endpoint
+  register recovery and USB operation over repeated cycles.  Clock gating
+  alone does not demonstrate context-loss recovery; wrapper/PHY support may
+  need a separate change before this test can pass.
