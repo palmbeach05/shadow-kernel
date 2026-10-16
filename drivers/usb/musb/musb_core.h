@@ -347,6 +347,22 @@ struct musb {
 	struct clk		*clock;
 #ifdef CONFIG_PM
 	struct musb_context_registers context;
+	/* Optional sleepable system PM; callbacks own platform clocks. */
+	int			(*pm_prepare)(struct musb *musb);
+	int			(*pm_suspend)(struct musb *musb);
+	int			(*pm_resume)(struct musb *musb);
+	void			(*pm_complete)(struct musb *musb);
+#ifdef CONFIG_ARCH_OMAP3430
+	struct {
+		u32 sysconfig, interfsel, forcestandby;
+		unsigned long idle_expires, otg_expires;
+		int dma_irq;
+		unsigned idle_pending:1;
+		unsigned clock_off:1;
+		unsigned otg_pending:1;
+		unsigned quiesced:1;
+	} omap_context;
+#endif
 #endif
 	irqreturn_t		(*isr)(int, void *);
 	struct work_struct	irq_work;
