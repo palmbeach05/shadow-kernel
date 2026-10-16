@@ -2206,14 +2206,17 @@ static int musb_resume_noirq(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct musb	*musb = dev_to_musb(&pdev->dev);
+	int ret;
 
 	if (!musb->clock)
 		return 0;
 
 	if (musb->set_clock)
-		musb->set_clock(musb->clock, 1);
+		ret = musb->set_clock(musb->clock, 1);
 	else
-		clk_enable(musb->clock);
+		ret = clk_enable(musb->clock);
+	if (ret)
+		return ret;
 
 	/* for static cmos like DaVinci, register values were preserved
 	 * unless for some reason the whole soc powered down or the USB
