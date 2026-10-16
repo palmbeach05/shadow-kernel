@@ -1,0 +1,43 @@
+MUSB context restoration acceptance tests
+========================================
+
+Use this procedure when validating the context-restoration adaptation for
+2.6.32.44. This procedure does not establish that an adaptation is present
+or that a particular kernel has passed testing.
+
+Record the base revision, patch revision, board, controller revision, kernel
+configuration, compiler and boot log with each result. Test the supported
+host, peripheral and OTG configurations separately; record unsupported modes
+as such. Include DMA and CONFIG_MUSB_PIO_ONLY builds where supported, and
+compile with CONFIG_PM both enabled and disabled. A successful build does
+not establish correct register ordering on hardware.
+
+1. Boot with the cable disconnected, then connect it. Verify enumeration
+   and sustained transfers in both directions. Repeat with a cable attached
+   at boot. Check data integrity and kernel logs for USB, DMA and IRQ errors.
+2. Suspend with the cable disconnected, resume and reconnect. Repeat enough
+   times to expose stale saved state, recording the iteration count. Verify
+   enumeration and bidirectional transfers after every reconnect.
+3. Repeat with attached devices where the selected mode permits suspend.
+   Verify wakeup behavior and pending-transfer completion without duplicate
+   completions, lost requests or DMA access while clocks are disabled.
+4. Exercise failed suspend attempts and immediate wakeups. Verify that a
+   subsequent transfer and suspend/resume still work. Also exercise resume
+   before any context has been saved; it must not replay uninitialized state.
+5. Exercise OMAP idle/off-mode independently of system suspend. Use platform
+   power-domain diagnostics to confirm actual context loss, recording the
+   evidence. Merely enabling off-mode, or returning from suspend, is not
+   proof that the controller lost context. Repeat enumeration and transfers
+   after confirmed loss, including cable-disconnected idle and reconnection.
+
+During instrumented testing, verify that saving precedes clock removal and
+restoration follows successful clock enable, before IRQ, DMA or endpoint
+activity resumes. Confirm endpoint selection is restored after all indexed
+register accesses. Check that system suspend and platform idle paths cannot
+restore the same snapshot twice or overwrite a valid snapshot with readings
+from an inaccessible controller. Remove timing-sensitive instrumentation and
+repeat the acceptance tests with the production kernel.
+
+Report compilation and device results separately. State explicitly which
+configurations, USB modes and context-loss paths remain untested. Do not
+describe retention-only suspend testing as off-mode coverage.
