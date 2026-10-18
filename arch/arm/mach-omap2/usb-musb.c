@@ -139,11 +139,15 @@ static int clk_on;
 
 static int musb_set_clock(struct clk *clk, int state)
 {
+	int ret;
+
 	if (state) {
 		if (clk_on > 0)
 			return -ENODEV;
 
-		clk_enable(clk);
+		ret = clk_enable(clk);
+		if (ret)
+			return ret;
 		clk_on = 1;
 	} else {
 		if (clk_on == 0)
