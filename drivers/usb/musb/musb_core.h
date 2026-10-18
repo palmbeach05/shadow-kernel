@@ -40,6 +40,7 @@
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
+#include <linux/mutex.h>
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/usb/ch9.h>
@@ -313,6 +314,31 @@ static inline struct usb_request *next_out_request(struct musb_hw_ep *hw_ep)
 #endif
 }
 
+#ifdef CONFIG_PM
+/* Core register context; wrapper and PHY state belongs to the platform. */
+struct musb_csr_regs {
+	u16 txmaxp, txcsr, rxmaxp, rxcsr;
+#ifndef CONFIG_BLACKFIN
+	u16 txfifoadd, rxfifoadd;
+	u8 txfifosz, rxfifosz;
+#endif
+#ifdef CONFIG_USB_MUSB_HDRC_HCD
+	u8 txtype, txinterval, rxtype, rxinterval;
+#ifndef CONFIG_BLACKFIN
+	u8 txfunaddr, txhubaddr, txhubport;
+	u8 rxfunaddr, rxhubaddr, rxhubport;
+#endif
+#endif
+};
+
+struct musb_context_registers {
+	u8 faddr, power, intrusbe;
+	u16 intrtxe, intrrxe;
+	u8 index, testmode, devctl;
+	struct musb_csr_regs index_regs[MUSB_C_NUM_EPS];
+};
+#endif
+
 /*
  * struct musb - Driver instance data.
  */
@@ -320,6 +346,31 @@ struct musb {
 	/* device lock */
 	spinlock_t		lock;
 	struct clk		*clock;
+#ifdef CONFIG_PM
+	struct musb_context_registers context;
+	/* Optional sleepable system PM; callbacks own platform clocks. */
+	int			(*pm_prepare)(struct musb *musb);
+	int			(*pm_suspend)(struct musb *musb);
+	int			(*pm_resume)(struct musb *musb);
+	void			(*pm_complete)(struct musb *musb);
+#ifdef CONFIG_ARCH_OMAP3430
+	struct {
+		/* Cable callbacks can drop musb->lock while giving back requests. */
+		struct mutex cpcap_lock;
+		u32 sysconfig, interfsel, forcestandby;
+		u32 bigendian;
+		unsigned long idle_expires, otg_expires;
+		int dma_irq;
+		u8 cpcap_event;
+		u8 cpcap_pending;
+		u8 cpcap_disconnected;
+		unsigned idle_pending:1;
+		unsigned clock_off:1;
+		unsigned otg_pending:1;
+		unsigned quiesced:1;
+	} omap_context;
+#endif
+#endif
 	irqreturn_t		(*isr)(int, void *);
 	struct work_struct	irq_work;
 #define MUSB_HWVERS_MAJOR(x)    ((x >> 10) & 0x1f)

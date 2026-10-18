@@ -2173,14 +2173,171 @@ static int __devexit musb_remove(struct platform_device *pdev)
 
 #ifdef	CONFIG_PM
 
+/* Called with exclusive register access and the controller clock enabled. */
+static void musb_save_context(struct musb *musb)
+{
+	struct musb_context_registers *context = &musb->context;
+	void __iomem *mbase = musb->mregs;
+	int i;
+
+	/* FIFO configuration is indexed even on flat-register platforms. */
+	context->index = musb_readb(mbase, MUSB_INDEX);
+	context->faddr = musb_readb(mbase, MUSB_FADDR);
+	context->power = musb_readb(mbase, MUSB_POWER);
+	context->intrtxe = musb_readw(mbase, MUSB_INTRTXE);
+	context->intrrxe = musb_readw(mbase, MUSB_INTRRXE);
+	context->intrusbe = musb_readb(mbase, MUSB_INTRUSBE);
+	context->testmode = musb_readb(mbase, MUSB_TESTMODE);
+	context->devctl = musb_readb(mbase, MUSB_DEVCTL);
+
+	for (i = 0; i < musb->nr_endpoints && i < MUSB_C_NUM_EPS; i++) {
+		struct musb_hw_ep *hw_ep = &musb->endpoints[i];
+		struct musb_csr_regs *ep = &context->index_regs[i];
+		void __iomem *epio = hw_ep->regs;
+
+		if (!(musb->epmask & (1 << i)))
+			continue;
+
+		musb_writeb(mbase, MUSB_INDEX, i);
+#ifndef CONFIG_BLACKFIN
+		if (musb->config->dyn_fifo) {
+			ep->txfifosz = musb_readb(mbase, MUSB_TXFIFOSZ);
+			ep->rxfifosz = musb_readb(mbase, MUSB_RXFIFOSZ);
+			ep->txfifoadd = musb_readw(mbase, MUSB_TXFIFOADD);
+			ep->rxfifoadd = musb_readw(mbase, MUSB_RXFIFOADD);
+		}
+#endif
+		if (i && hw_ep->max_packet_sz_tx) {
+			ep->txmaxp = musb_readw(epio, MUSB_TXMAXP);
+			ep->txcsr = musb_readw(epio, MUSB_TXCSR);
+		}
+		if (i && hw_ep->max_packet_sz_rx) {
+			ep->rxmaxp = musb_readw(epio, MUSB_RXMAXP);
+			ep->rxcsr = musb_readw(epio, MUSB_RXCSR);
+		}
+		/* EP0 uses CSR0 rather than the nonzero endpoint CSRs. */
+		if (!i)
+			ep->txcsr = musb_readw(epio, MUSB_CSR0);
+#ifdef CONFIG_USB_MUSB_HDRC_HCD
+		if (is_host_enabled(musb)) {
+			if (!i || hw_ep->max_packet_sz_tx) {
+				ep->txtype = musb_readb(epio, MUSB_TXTYPE);
+				ep->txinterval = musb_readb(epio, MUSB_TXINTERVAL);
+			}
+			if (i && hw_ep->max_packet_sz_rx) {
+				ep->rxtype = musb_readb(epio, MUSB_RXTYPE);
+				ep->rxinterval = musb_readb(epio, MUSB_RXINTERVAL);
+			}
+#ifndef CONFIG_BLACKFIN
+			if (musb->is_multipoint) {
+				void __iomem *target = hw_ep->target_regs;
+
+				ep->txfunaddr = musb_readb(target, MUSB_TXFUNCADDR);
+				ep->txhubaddr = musb_readb(target, MUSB_TXHUBADDR);
+				ep->txhubport = musb_readb(target, MUSB_TXHUBPORT);
+				ep->rxfunaddr = musb_readb(target, MUSB_RXFUNCADDR);
+				ep->rxhubaddr = musb_readb(target, MUSB_RXHUBADDR);
+				ep->rxhubport = musb_readb(target, MUSB_RXHUBPORT);
+			}
+#endif
+		}
+#endif
+	}
+	musb_writeb(mbase, MUSB_INDEX, context->index);
+}
+
+/* Called with exclusive register access and the controller clock enabled. */
+static void musb_restore_context(struct musb *musb)
+{
+	struct musb_context_registers *context = &musb->context;
+	void __iomem *mbase = musb->mregs;
+	int i;
+
+	/* Keep interrupts masked until all endpoint state is restored. */
+	musb_writew(mbase, MUSB_INTRTXE, 0);
+	musb_writew(mbase, MUSB_INTRRXE, 0);
+	musb_writeb(mbase, MUSB_INTRUSBE, 0);
+
+	for (i = 0; i < musb->nr_endpoints && i < MUSB_C_NUM_EPS; i++) {
+		struct musb_hw_ep *hw_ep = &musb->endpoints[i];
+		struct musb_csr_regs *ep = &context->index_regs[i];
+		void __iomem *epio = hw_ep->regs;
+
+		if (!(musb->epmask & (1 << i)))
+			continue;
+
+		musb_writeb(mbase, MUSB_INDEX, i);
+#ifndef CONFIG_BLACKFIN
+		if (musb->config->dyn_fifo) {
+			musb_writeb(mbase, MUSB_TXFIFOSZ, ep->txfifosz);
+			musb_writeb(mbase, MUSB_RXFIFOSZ, ep->rxfifosz);
+			musb_writew(mbase, MUSB_TXFIFOADD, ep->txfifoadd);
+			musb_writew(mbase, MUSB_RXFIFOADD, ep->rxfifoadd);
+		}
+#endif
+		if (i && hw_ep->max_packet_sz_tx)
+			musb_writew(epio, MUSB_TXMAXP, ep->txmaxp);
+		if (i && hw_ep->max_packet_sz_rx)
+			musb_writew(epio, MUSB_RXMAXP, ep->rxmaxp);
+#ifdef CONFIG_USB_MUSB_HDRC_HCD
+		if (is_host_enabled(musb)) {
+			if (!i || hw_ep->max_packet_sz_tx) {
+				musb_writeb(epio, MUSB_TXTYPE, ep->txtype);
+				musb_writeb(epio, MUSB_TXINTERVAL, ep->txinterval);
+			}
+			if (i && hw_ep->max_packet_sz_rx) {
+				musb_writeb(epio, MUSB_RXTYPE, ep->rxtype);
+				musb_writeb(epio, MUSB_RXINTERVAL, ep->rxinterval);
+			}
+#ifndef CONFIG_BLACKFIN
+			if (musb->is_multipoint) {
+				void __iomem *target = hw_ep->target_regs;
+
+				musb_writeb(target, MUSB_TXFUNCADDR, ep->txfunaddr);
+				musb_writeb(target, MUSB_TXHUBADDR, ep->txhubaddr);
+				musb_writeb(target, MUSB_TXHUBPORT, ep->txhubport);
+				musb_writeb(target, MUSB_RXFUNCADDR, ep->rxfunaddr);
+				musb_writeb(target, MUSB_RXHUBADDR, ep->rxhubaddr);
+				musb_writeb(target, MUSB_RXHUBPORT, ep->rxhubport);
+			}
+#endif
+		}
+#endif
+		/* Restore CSRs after FIFO layout and host routing are ready. */
+		if (!i)
+			musb_writew(epio, MUSB_CSR0, ep->txcsr);
+		else {
+			if (hw_ep->max_packet_sz_tx)
+				musb_writew(epio, MUSB_TXCSR, ep->txcsr);
+			if (hw_ep->max_packet_sz_rx)
+				musb_writew(epio, MUSB_RXCSR, ep->rxcsr);
+		}
+	}
+	musb_writeb(mbase, MUSB_INDEX, context->index);
+	musb_writeb(mbase, MUSB_FADDR, context->faddr);
+	musb_writeb(mbase, MUSB_TESTMODE, context->testmode);
+	musb_writeb(mbase, MUSB_DEVCTL, context->devctl);
+	musb_writeb(mbase, MUSB_POWER, context->power);
+	musb_writew(mbase, MUSB_INTRTXE, context->intrtxe);
+	musb_writew(mbase, MUSB_INTRRXE, context->intrrxe);
+	musb_writeb(mbase, MUSB_INTRUSBE, context->intrusbe);
+}
+
 static int musb_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	unsigned long	flags;
 	struct musb	*musb = dev_to_musb(&pdev->dev);
+	int ret;
 
 	if (!musb->clock)
 		return 0;
+
+	if (musb->pm_prepare) {
+		ret = musb->pm_prepare(musb);
+		if (ret)
+			return ret;
+	}
 
 	spin_lock_irqsave(&musb->lock, flags);
 
@@ -2192,6 +2349,13 @@ static int musb_suspend(struct device *dev)
 		/* we know all the children are suspended; sometimes
 		 * they will even be wakeup-enabled.
 		 */
+	}
+
+	musb_save_context(musb);
+
+	if (musb->pm_suspend) {
+		spin_unlock_irqrestore(&musb->lock, flags);
+		return musb->pm_suspend(musb);
 	}
 
 	if (musb->set_clock)
@@ -2208,7 +2372,7 @@ static int musb_resume_noirq(struct device *dev)
 	struct musb	*musb = dev_to_musb(&pdev->dev);
 	int ret;
 
-	if (!musb->clock)
+	if (!musb->clock || musb->pm_resume)
 		return 0;
 
 	if (musb->set_clock)
@@ -2218,16 +2382,39 @@ static int musb_resume_noirq(struct device *dev)
 	if (ret)
 		return ret;
 
-	/* for static cmos like DaVinci, register values were preserved
-	 * unless for some reason the whole soc powered down or the USB
-	 * module got reset through the PSC (vs just being disabled).
+	/* The existing PM path leaves the platform wrapper and PHY configured.
+	 * A platform that loses those registers must make core access ready
+	 * before restoring this context (see Documentation/usb/musb-context.txt).
 	 */
+	musb_restore_context(musb);
+	return 0;
+}
+
+/* PHY callbacks may use I2C/regulators and cannot run in resume_noirq. */
+static int musb_resume(struct device *dev)
+{
+	struct musb *musb = dev_to_musb(dev);
+	unsigned long flags;
+	int ret;
+
+	if (!musb->clock || !musb->pm_resume)
+		return 0;
+
+	ret = musb->pm_resume(musb);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&musb->lock, flags);
+	musb_restore_context(musb);
+	spin_unlock_irqrestore(&musb->lock, flags);
+	musb->pm_complete(musb);
 	return 0;
 }
 
 static struct dev_pm_ops musb_dev_pm_ops = {
 	.suspend	= musb_suspend,
 	.resume_noirq	= musb_resume_noirq,
+	.resume		= musb_resume,
 };
 
 #define MUSB_DEV_PM_OPS (&musb_dev_pm_ops)
