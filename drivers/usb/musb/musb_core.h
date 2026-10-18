@@ -40,6 +40,7 @@
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
+#include <linux/mutex.h>
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/usb/ch9.h>
@@ -354,9 +355,15 @@ struct musb {
 	void			(*pm_complete)(struct musb *musb);
 #ifdef CONFIG_ARCH_OMAP3430
 	struct {
+		/* Cable callbacks can drop musb->lock while giving back requests. */
+		struct mutex cpcap_lock;
 		u32 sysconfig, interfsel, forcestandby;
+		u32 bigendian;
 		unsigned long idle_expires, otg_expires;
 		int dma_irq;
+		u8 cpcap_event;
+		u8 cpcap_pending;
+		u8 cpcap_disconnected;
 		unsigned idle_pending:1;
 		unsigned clock_off:1;
 		unsigned otg_pending:1;

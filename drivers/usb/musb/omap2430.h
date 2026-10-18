@@ -50,6 +50,9 @@
 #	define	TM1			(1 << 0)
 #define OTG_FORCESTDBY		OMAP_HSOTG(0x14)
 #	define	ENABLEFORCE		(1 << 0)
+/* OMAP3630 only; do not access this register on OMAP3430/2430. */
+#define OTG_BIGENDIAN		OMAP_HSOTG(0x18)
+#	define	BIGENDIAN		(1 << 0)
 
 #endif	/* CONFIG_ARCH_OMAP2430 */
 
