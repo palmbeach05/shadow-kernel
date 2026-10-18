@@ -192,7 +192,12 @@ static int omap_set_power(struct otg_transceiver *x, unsigned mA)
 	return 0;
 }
 
-static int musb_platform_resume(struct musb *musb);
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_OMAP3430)
+static int omap_musb_pm_prepare(struct musb *musb);
+static int omap_musb_pm_suspend(struct musb *musb);
+static int omap_musb_pm_resume(struct musb *musb);
+static void omap_musb_pm_complete(struct musb *musb);
+#endif
 
 int musb_platform_set_mode(struct musb *musb, u8 musb_mode)
 {
@@ -251,7 +256,8 @@ int __init musb_platform_init(struct musb *musb)
 		return -ENODEV;
 	}
 
-	musb_platform_resume(musb);
+	/* The clock was enabled above; do not acquire it a second time. */
+	otg_set_suspend(musb->xceiv, 0);
 
 	l = omap_readl(OTG_SYSCONFIG);
 	l &= ~ENABLEWAKEUP;	/* disable wakeup */
@@ -288,6 +294,16 @@ int __init musb_platform_init(struct musb *musb)
 
 	setup_timer(&musb_idle_timer, musb_do_idle, (unsigned long) musb);
 
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_OMAP3430)
+	/* OMAP2430 retention and PHY sequencing need separate validation. */
+	if (cpu_is_omap3430()) {
+		musb->pm_prepare = omap_musb_pm_prepare;
+		musb->pm_suspend = omap_musb_pm_suspend;
+		musb->pm_resume = omap_musb_pm_resume;
+		musb->pm_complete = omap_musb_pm_complete;
+	}
+#endif
+
 	return 0;
 }
 
@@ -318,32 +334,156 @@ int musb_platform_suspend(struct musb *musb)
 	return 0;
 }
 
-static int musb_platform_resume(struct musb *musb)
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_OMAP3430)
+/* All four callbacks run in the regular (sleepable) system PM phase. */
+static int omap_musb_pm_prepare(struct musb *musb)
 {
-	u32 l;
+	/* A failed resume must be retried before another context save. */
+	if (musb->omap_context.quiesced)
+		return -EBUSY;
+	musb->omap_context.quiesced = 1;
+	/* Neither interrupts nor timers may touch an unclocked core. */
+	disable_irq(musb->nIrq);
+	musb->omap_context.dma_irq = 0;
+#ifdef CONFIG_USB_INVENTRA_DMA
+	if (musb->dma_controller) {
+		int irq = platform_get_irq_byname(
+			to_platform_device(musb->controller), "dma");
 
-	if (!musb->clock)
-		return 0;
-
-	if (musb->xceiv->set_suspend)
-		musb->xceiv->set_suspend(musb->xceiv, 0);
-
-	if (musb->set_clock)
-		musb->set_clock(musb->clock, 1);
-	else
-		clk_enable(musb->clock);
-
-	l = omap_readl(OTG_SYSCONFIG);
-	l &= ~ENABLEWAKEUP;	/* disable wakeup */
-	omap_writel(l, OTG_SYSCONFIG);
-#if 0
-	l = omap_readl(OTG_FORCESTDBY);
-	l &= ~ENABLEFORCE;	/* disable MSTANDBY */
-	omap_writel(l, OTG_FORCESTDBY);
+		if (irq > 0 && irq != musb->nIrq) {
+			disable_irq(irq);
+			musb->omap_context.dma_irq = irq;
+		}
+	}
 #endif
+#ifdef CONFIG_USB_MUSB_OTG
+	musb->omap_context.otg_expires = musb->otg_timer.expires;
+	musb->omap_context.otg_pending = del_timer_sync(&musb->otg_timer);
+#endif
+	musb->omap_context.idle_expires = musb_idle_timer.expires;
+	musb->omap_context.idle_pending = del_timer_sync(&musb_idle_timer);
 	return 0;
 }
 
+static void omap_musb_pm_complete(struct musb *musb)
+{
+#ifdef CONFIG_USB_MUSB_OTG
+	if (musb->omap_context.otg_pending) {
+		mod_timer(&musb->otg_timer,
+			time_after(musb->omap_context.otg_expires, jiffies) ?
+			musb->omap_context.otg_expires : jiffies + 1);
+		musb->omap_context.otg_pending = 0;
+	}
+#endif
+	if (musb->omap_context.idle_pending) {
+		mod_timer(&musb_idle_timer,
+			time_after(musb->omap_context.idle_expires, jiffies) ?
+			musb->omap_context.idle_expires : jiffies + 1);
+		musb->omap_context.idle_pending = 0;
+	}
+	if (musb->omap_context.dma_irq)
+		enable_irq(musb->omap_context.dma_irq);
+	enable_irq(musb->nIrq);
+	musb->omap_context.quiesced = 0;
+}
+
+static void omap_musb_restore_wrapper(struct musb *musb)
+{
+	u32 sysconfig = musb->omap_context.sysconfig;
+
+	/* SPRUF98Y 23.1.5.4: release force before changing idle modes.
+	 * Do not enable AUTOIDLE in the same write as smart-idle.
+	 * Keep the existing OMAP3430 AUTOIDLE workaround/policy.
+	 */
+	omap_writel(0, OTG_FORCESTDBY);
+	omap_writel(NOSTDBY | NOIDLE, OTG_SYSCONFIG);
+	omap_writel(musb->omap_context.interfsel, OTG_INTERFSEL);
+	omap_writel(sysconfig & ~AUTOIDLE, OTG_SYSCONFIG);
+	omap_writel(musb->omap_context.forcestandby, OTG_FORCESTDBY);
+	omap_writel(sysconfig, OTG_SYSCONFIG);
+	/* Flush posted wrapper writes before any Mentor core accesses. */
+	omap_readl(OTG_SYSCONFIG);
+}
+
+static int omap_musb_pm_resume(struct musb *musb)
+{
+	int ret, undo;
+
+	if (!musb->omap_context.quiesced)
+		return -EINVAL;
+
+	if (musb->omap_context.clock_off) {
+		if (musb->set_clock)
+			ret = musb->set_clock(musb->clock, 1);
+		else
+			ret = clk_enable(musb->clock);
+		if (ret)
+			return ret;
+		musb->omap_context.clock_off = 0;
+	}
+
+	omap_musb_restore_wrapper(musb);
+	/* TWL4030 restores power, PHY clock and ULPI mode over I2C.
+	 * This must finish before the core context is restored.
+	 */
+	ret = otg_set_suspend(musb->xceiv, 0);
+	if (ret) {
+		/* Leave the IRQ/timer quiesced and release our clock reference.
+		 * A later retry must not enable an already enabled clock.
+		 */
+		omap_writel(ENABLEFORCE, OTG_FORCESTDBY);
+		omap_readl(OTG_FORCESTDBY);
+		if (musb->set_clock) {
+			undo = musb->set_clock(musb->clock, 0);
+			if (!undo)
+				musb->omap_context.clock_off = 1;
+			else
+				dev_err(musb->controller,
+					"resume clock cleanup failed: %d\n", undo);
+		} else {
+			clk_disable(musb->clock);
+			musb->omap_context.clock_off = 1;
+		}
+	}
+	return ret;
+}
+
+static int omap_musb_pm_suspend(struct musb *musb)
+{
+	int ret, undo;
+
+	/* Core context has already been saved with the clock enabled. */
+	musb->omap_context.sysconfig = omap_readl(OTG_SYSCONFIG) & ~SOFTRST;
+	musb->omap_context.interfsel = omap_readl(OTG_INTERFSEL) & 3;
+	musb->omap_context.forcestandby = omap_readl(OTG_FORCESTDBY) & ENABLEFORCE;
+
+	omap_writel(ENABLEFORCE, OTG_FORCESTDBY);
+	omap_writel(musb->omap_context.sysconfig | ENABLEWAKEUP,
+		OTG_SYSCONFIG);
+	omap_readl(OTG_SYSCONFIG);
+	ret = otg_set_suspend(musb->xceiv, 1);
+	if (ret)
+		goto undo_suspend;
+
+	if (musb->set_clock) {
+		ret = musb->set_clock(musb->clock, 0);
+		if (ret)
+			goto undo_suspend;
+	} else {
+		clk_disable(musb->clock);
+	}
+	musb->omap_context.clock_off = 1;
+	return 0;
+
+undo_suspend:
+	undo = omap_musb_pm_resume(musb);
+	if (!undo)
+		omap_musb_pm_complete(musb);
+	else
+		dev_err(musb->controller, "suspend rollback failed: %d\n", undo);
+	return ret;
+}
+#endif
 
 int musb_platform_exit(struct musb *musb)
 {

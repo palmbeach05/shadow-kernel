@@ -2329,9 +2329,16 @@ static int musb_suspend(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	unsigned long	flags;
 	struct musb	*musb = dev_to_musb(&pdev->dev);
+	int ret;
 
 	if (!musb->clock)
 		return 0;
+
+	if (musb->pm_prepare) {
+		ret = musb->pm_prepare(musb);
+		if (ret)
+			return ret;
+	}
 
 	spin_lock_irqsave(&musb->lock, flags);
 
@@ -2347,6 +2354,11 @@ static int musb_suspend(struct device *dev)
 
 	musb_save_context(musb);
 
+	if (musb->pm_suspend) {
+		spin_unlock_irqrestore(&musb->lock, flags);
+		return musb->pm_suspend(musb);
+	}
+
 	if (musb->set_clock)
 		musb->set_clock(musb->clock, 0);
 	else
@@ -2361,7 +2373,7 @@ static int musb_resume_noirq(struct device *dev)
 	struct musb	*musb = dev_to_musb(&pdev->dev);
 	int ret;
 
-	if (!musb->clock)
+	if (!musb->clock || musb->pm_resume)
 		return 0;
 
 	if (musb->set_clock)
@@ -2382,9 +2394,31 @@ static int musb_resume_noirq(struct device *dev)
 	return 0;
 }
 
+/* PHY callbacks may use I2C/regulators and cannot run in resume_noirq. */
+static int musb_resume(struct device *dev)
+{
+	struct musb *musb = dev_to_musb(dev);
+	unsigned long flags;
+	int ret;
+
+	if (!musb->clock || !musb->pm_resume)
+		return 0;
+
+	ret = musb->pm_resume(musb);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&musb->lock, flags);
+	musb_restore_context(musb);
+	spin_unlock_irqrestore(&musb->lock, flags);
+	musb->pm_complete(musb);
+	return 0;
+}
+
 static struct dev_pm_ops musb_dev_pm_ops = {
 	.suspend	= musb_suspend,
 	.resume_noirq	= musb_resume_noirq,
+	.resume		= musb_resume,
 };
 
 #define MUSB_DEV_PM_OPS (&musb_dev_pm_ops)
