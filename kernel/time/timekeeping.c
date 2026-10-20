@@ -163,11 +163,13 @@ static struct timespec total_sleep_time;
 /* Offset clock monotonic -> clock realtime */
 static ktime_t offs_real;
 
+/* Offset clock monotonic -> clock boottime */
+static ktime_t offs_boot;
+
 /*
  * The raw monotonic time for the CLOCK_MONOTONIC_RAW posix clock.
  */
 static struct timespec raw_time;
-
 
 /* must hold write on xtime_lock */
 static void update_rt_offset(void)
@@ -640,6 +642,12 @@ void __init timekeeping_init(void)
 /* time in seconds when suspend began */
 static struct timespec timekeeping_suspend_time;
 
+static void update_sleep_time(struct timespec t)
+{
+	total_sleep_time = t;
+	offs_boot = timespec_to_ktime(t);
+}
+
 /**
  * timekeeping_resume - Resumes the generic timekeeping subsystem.
  * @dev:	unused
@@ -663,7 +671,7 @@ static int timekeeping_resume(struct sys_device *dev)
 		ts = timespec_sub(ts, timekeeping_suspend_time);
 		xtime = timespec_add(xtime, ts);
 		wall_to_monotonic = timespec_sub(wall_to_monotonic, ts);
-		total_sleep_time = timespec_add(total_sleep_time, ts);
+		update_sleep_time(timespec_add(total_sleep_time, ts));
 	}
 	/* re-base the last cycle value */
 	timekeeper.clock->cycle_last = timekeeper.clock->read(timekeeper.clock);
