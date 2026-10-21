@@ -986,10 +986,6 @@ static void update_wall_time(void)
 
 	timekeeper.xtime_nsec = (s64)xtime.tv_nsec << timekeeper.shift;
 
-	/* Check if there's really nothing to do */
-	if (offset < timekeeper.cycle_interval)
-		return;
-
 	/*
 	 * With NO_HZ we may have to accumulate many cycle_intervals
 	 * (think "ticks") worth of time at once. To do this efficiently,
