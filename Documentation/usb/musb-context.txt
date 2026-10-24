@@ -7,7 +7,8 @@ The context layout and save/restore coverage are adapted from Linux v2.6.39:
 https://github.com/torvalds/linux/blob/v2.6.39/drivers/usb/musb/musb_core.c
 https://github.com/torvalds/linux/blob/v2.6.39/drivers/usb/musb/musb_core.h
 
-This is an adaptation to 2.6.32.44, not a direct application of stable commit
+The original backport was described as an adaptation to 2.6.32.44,
+not a direct application of stable commit
 262e2d9d559334e09bc80516132ea99d82f97b8c.  The local tree uses
 musb->config->dyn_fifo and has no upstream FIFO/target read helpers or ULPI
 bus-control accessor.  Reads therefore use this tree's register definitions.
@@ -49,12 +50,12 @@ board-mapphone-cpcap-client.c registers the CPCAP transceiver and detector.
 Reference configuration:
 https://raw.githubusercontent.com/palmbeach05/shadow-kernel/2.6.32.9/arch/arm/configs/shadow_cm11_defconfig
 
-The supplied #58 diff was reviewed against the local snapshot.  This checkout
-has a single root commit containing that implementation, with local branch
-2.6.32.9 pointing to the same snapshot.  #58 target-branch metadata and its
-pre-change baseline are unavailable locally; no remote repository operations
-were performed.  Replacement ancestry and equality to the linked reference
-configuration still require verification by the replacement PR workflow.
+At the historical #58 review, the supplied diff was reviewed against a local
+snapshot with a single root commit containing that implementation and local
+branch 2.6.32.9 pointing to the same snapshot.  #58 target-branch metadata and its
+pre-change baseline were unavailable locally; no remote repository operations
+were performed during that review.  Replacement ancestry and equality to the
+linked reference configuration still require verification by the replacement PR workflow.
 
 Compatibility:
 - OMAP3430 with TWL4030: existing sleepable wrapper/PHY callback path retained.
@@ -148,10 +149,15 @@ deferral protects controller MMIO but does not freeze CPCAP accessory work.
 
 Clock-enable failure returns before wrapper or core MMIO.  Wrapper-validation
 or PHY-resume failure keeps IRQs/timers quiesced, requests standby and
-releases the acquired clock; core restore is skipped.  Clock ownership is tracked so retries do not acquire
-a duplicate reference.  Suspend errors attempt wrapper/PHY rollback and only
-unquiesce after successful rollback; rollback failure is logged.  A failed
-resume must be retried before another suspend can save context.  The existing
+releases the acquired clock; core restore is skipped.  Clock ownership is
+tracked so retries do not acquire a duplicate reference, including when a
+cleanup disable fails and leaves the reference held.  Suspend errors attempt
+wrapper/PHY rollback and only unquiesce after successful rollback; rollback failure is logged.  A failed
+resume now receives bounded synchronous retries before returning failure;
+another suspend cannot save context while restoration remains failed.  There
+are at most three total attempts, with 20 ms between failed attempts; suspend
+rollback uses the same policy.  See musb-resume-recovery.txt for current base
+verification, validation results and the retry procedure.  The existing
 OMAP clock callback reports failure without changing clock state.  During
 initialization the clock is already on, so the old second enable is removed.
 Other platforms keep their existing clock ownership and resume_noirq path.
