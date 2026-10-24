@@ -29,6 +29,7 @@
 #include <linux/kref.h>
 #include <linux/mutex.h>
 #include <linux/skbuff.h>
+#include <linux/spinlock.h>
 
 struct dentry;
 struct inode;
@@ -284,6 +285,14 @@ struct kim_data_s {
 	long uim_pid;
 	struct platform_device *kim_pdev;
 	struct completion kim_rcvd, ldisc_installed;
+	/* Protects the receive parser and firmware response transaction. */
+	spinlock_t response_lock;
+	u8 expected_event[257]; /* HCI event header and maximum payload */
+	unsigned int expected_len;
+	u16 expected_opcode;
+	bool response_pending;
+	bool read_version;
+	int response_result;
 	char resp_buffer[30];
 	const struct firmware *fw_entry;
 	unsigned nshutdown;
