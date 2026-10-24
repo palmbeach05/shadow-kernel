@@ -13,9 +13,14 @@ KIM still requests the GPIO at probe, configures it output-low, and frees it
 on probe unwind or removal. Startup remains low for 5 ms then high for
 100 ms; shutdown remains low/high/low with 1 ms delays between transitions.
 The alternative non-WiLink/rfkill branch is unchanged. Generic platform
-callback error propagation is deferred to a separate PR. Suspend/resume
+callback error propagation is present in this branch (PR #65); see
+Documentation/ti-st-lifecycle.txt for its contract and host checks. Suspend/resume
 callbacks and UART sleep/wake handling are unchanged; host-wake behavior
 remains unverified. No suspend/resume reset pulses are added.
+
+For the UART source trace, hardware requirements and separate sleep/wake,
+suspend/resume and Bluetooth-triggered host-wake checks, see
+Documentation/ti-st-mapphone-host-wake.txt.
 
 Source inspection and base limitations (2026-10-24)
 --------------------------------------------------

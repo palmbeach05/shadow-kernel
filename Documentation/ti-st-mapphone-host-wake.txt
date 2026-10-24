@@ -1,0 +1,208 @@
+MAPPHONE Bluetooth suspend/resume and host wake
+=============================================
+
+Scope and PM contract
+---------------------
+This procedure establishes what must be verified on a device. Bluetooth host
+wake is unverified. No wake configuration, reset pulses or runtime behavior
+are changed. KIM remains the sole owner of WiLink nShutdown (GPIO 179); see
+Documentation/ti-st-mapphone-reset.txt for startup/shutdown reset sequencing.
+
+In arch/arm/mach-omap2/board-mapphone.c, plat_kim_suspend() and
+plat_kim_resume() return zero without touching hardware. The kim_suspend()
+and kim_resume() wrappers in drivers/misc/ti-st/st_kim.c forward to these
+callbacks. They do not stop/start KIM, download firmware, arm a wake IRQ or
+confirm that WiLink can wake the host. No ordering between KIM and UART
+device callbacks is assumed by this contract.
+
+The separate HCI_LL protocol in drivers/misc/ti-st/st_ll.c acknowledges
+LL_SLEEP_IND (0x30) with LL_SLEEP_ACK (0x31), records the controller asleep,
+and exchanges LL_WAKE_UP_IND/ACK (0x32/0x33) to return to awake. The ST core
+in drivers/misc/ti-st/st_core.c queues outgoing packets while asleep and
+releases them after wake acknowledgement. MAPPHONE assigns neither
+chip_asleep nor chip_awake. This UART protocol can run with the host awake;
+it does not itself configure SoC wake routing or prove host suspend entry.
+
+Verified source path (2026-10-24)
+--------------------------------
+Inspected source at 8ae494aebe3082756701757f81cc7da1b8ea01fc, including AST
+outlines before focused reads of the board, serial, OMAP PM and KIM files
+and relevant serial headers. That revision includes PR #65's platform
+callback error propagation in st_kim_start()/st_kim_stop(). The following
+describes this branch; recheck it for any other kernel base.
+
+1. Board and UART identity
+
+   WILINK_UART_DEV_NAME is /dev/ttyS1. wilink_pdata requests flow control and
+   3686400 baud for built-in or modular CONFIG_BT_WILINK. In
+   arch/arm/mach-omap2/serial.c, uart2_device has platform ID 2, platform
+   data index 1, IRQ 73 and OMAP_UART2_BASE. serial_omap_probe() in
+   drivers/serial/omap-serial.c assigns port.line = pdev->id - 1 and the
+   driver name is ttyS: ttyS1 is UART2, zero-based index 1, at 0x4806c000.
+   arch/arm/plat-omap/include/plat/serial.h defines that OMAP3 base;
+   arch/arm/plat-omap/include/plat/omap-serial.h defines UART2 as 1.
+
+   mapphone_serial_init() enables UART2 and calls omap_cfg_reg() for TX
+   AA25, RX AD25, RTS AB25 and CTS AB26. arch/arm/mach-omap2/mux.c describes
+   mode 0, TX/RTS outputs and RX/CTS inputs with pull-ups, at offsets
+   0x178/0x17a/0x176/0x174 respectively. However, shadow_cm11_defconfig
+   disables CONFIG_OMAP_MUX: omap_cfg_reg() is then a no-op in
+   arch/arm/plat-omap/include/plat/mux.h. Actual muxing depends on bootloader
+   setup and must be recorded on the device.
+
+   CONFIG_SERIAL_OMAP3430_HW_FLOW_CONTROL supplies CTS|RTS defaults for
+   UART2; the board's UART device-tree flow-control property can override
+   them through omap_serial_ctsrts_init(). The conditional ctsrts field is
+   defined in arch/arm/include/asm/mach/serial_omap.h. With CRTSCTS,
+   serial_omap_set_termios() uses those bits (or CTS|RTS when the option is
+   disabled), deferring RTS restoration when restore_autorts is set.
+   Record the actual device tree and UIM/TTY settings, not just platform
+   data. The defconfig enables CONFIG_SERIAL_OMAP, CONFIG_PM and
+   CONFIG_SUSPEND, disables the OMAP console and UART DMA, and selects
+   CONFIG_PM_DEEPSLEEP. Other selections need their own verification.
+
+2. UART idle, clocks and wake detection
+
+   Under CONFIG_PM, omap_uart_idle_init() selects CORE PM_WKEN1/PM_WKST1
+   and OMAP3430_ST_UART2_MASK for index 1. It ORs the wake-enable mask and
+   OMAP3_PADCONF_WAKEUPENABLE0 into RX pad offset 0x17a. This is RX-pad
+   wake configuration, not a call to the CTS wake helper. RTS pad 0x176
+   is temporarily overridden with a pull-up during idle preparation.
+
+   omap_serial_init() obtains uart2_ick and uart2_fck. The inactivity timer
+   permits smart idle; the shared "serial idle" interrupt handler blocks
+   sleep and restarts the timer without consuming UART data. During idle
+   preparation, pending FIFO/transmit activity can prevent clock gating;
+   otherwise the interface and functional clocks are disabled. Resume
+   restores clocks and RTS pad state, checks the RX-pad wake-event bit and
+   PM_WKST1 mask, and blocks sleep on detected activity. Context save and
+   restore helpers explicitly skip omap34xx; do not infer OFF-mode UART
+   state retention from their presence.
+
+3. System suspend and interrupt ordering
+
+   With CONFIG_SUSPEND, arch/arm/mach-omap2/pm34xx.c installs the OMAP
+   suspend operations. omap3_pm_begin() removes the shared serial-idle
+   handlers, not the serial driver's data handler. Device suspend precedes
+   the platform enter operation. serial_omap_suspend() disables UART
+   interrupts temporarily, disables auto-RTS and forces RTS inactive when
+   needed, then checks activity. "UART FIFO break suspend" and -EBUSY
+   indicate an aborted attempt. Otherwise it calls uart_suspend_port().
+
+   drivers/serial/serial_core.c checks device_may_wakeup() on the TTY child.
+   When enabled it calls enable_irq_wake() and leaves the port running;
+   otherwise it shuts down an initialized port and changes its PM state.
+   Do not assume the wake-capable branch is selected by wilink_pdata.
+
+   omap3_pm_suspend() allows UART sleep before tracing pm_suspend_entry
+   and calling omap_sram_idle(). When CORE is targeted below ON, the latter
+   prepares UART indices 0 and 1 before low-power entry and resumes them
+   after CORE restoration. IO-pad/IO-chain enabling is conditional on the
+   target states and, under CONFIG_PM_DEEPSLEEP, !get_deepsleep_mode().
+   The disable side spells its guard CONFIG_PM_DEPPSLEEP in this branch;
+   this document does not change it. Record the actual selected mode.
+
+   PRCM interrupt handling masks wake status with MPU group selection,
+   temporarily enables clocks to clear latched status, then restores them.
+   prcm_setup_regs() does not explicitly set UART2's CORE MPU group bit;
+   its CORE group update clears mask 0x80000008. The MPU/CORE wake dependency
+   comment requires both PM_WKEN1_CORE and PM_MPUGRPSEL1_CORE bits for
+   OFF-mode wake. Record effective routing rather than assuming the UART
+   wake-enable bit completes the path. After platform return, UART device
+   resume calls uart_resume_port(); omap3_pm_end() reinstalls serial-idle
+   handlers. serial_omap_irq() handles RX/modem/TX events; its one-second
+   RX wake lock keeps an already running host awake, not proof of wake.
+
+4. Paths that do not establish Bluetooth host wake
+
+   omap24xx_uart_cts_wakeup() is guarded by CONFIG_OMAP3_PM, supports UART1
+   and UART2, and changes CTS pad, interrupt and UART WER settings. A
+   repository-wide search finds only its definition and export, no callers.
+   Its presence does not show that MAPPHONE enables CTS host wake.
+
+   mapphone_serial_init() passes the baseband wake strobe with mask 0x01,
+   assigning it only to UART1/index 0. serial_omap_wake_peer() pulses that
+   AP-to-BP GPIO. The separate mapphone_bpwake path requests the BP-to-AP
+   GPIO interrupt, enables IRQ wake, blocks UART0 sleep and holds a wake
+   lock. These are baseband paths, not WiLink/UART2 host-wake evidence.
+
+Unresolved hardware requirements
+--------------------------------
+Obtain the board revision's schematic and controller/firmware requirements:
+which WiLink signal reaches an OMAP wake-capable pad, its polarity and
+timing, whether RX or CTS is used, and whether it remains powered and
+observable in the tested CORE/MPU state. Verify bootloader muxing, effective
+pad/off-mode settings, UART WER, PRCM wake/group masks and TTY wake policy
+with suitable read-only diagnostics. Check whether inactive RTS prevents
+the controller's wake indication or first event from reaching the host.
+Identify firmware support for the selected remote event and preservation
+of controller state across host sleep. No source-only result resolves
+these questions. A functional wake fix requires separate device evidence.
+
+Repeatable device checks (not performed here)
+--------------------------------------------
+Use a known-working firmware/UIM setup and establish discovery, pairing and
+bidirectional traffic first. Keep Bluetooth enabled throughout PM trials;
+an intentional disable/enable invokes KIM reset and invalidates retention
+checks. Arrange an independent timed or physical wake source, verified
+before testing, to recover if Bluetooth wake fails. Timestamp that recovery
+so it cannot be mistaken for Bluetooth wake.
+
+1. Host awake, UART sleep/wake: prevent system suspend deliberately for
+   this check only. Let Bluetooth traffic idle, observe HCI_LL sleep/ack,
+   send host traffic and then remote traffic in separate trials, and
+   capture wake/ack plus successful payloads. Report UART clock-idle
+   observations separately from HCI_LL state. This is not a host-wake pass.
+2. Bluetooth idle, host-initiated suspend/resume: release test blockers,
+   request mem suspend through the device's normal PM interface, confirm
+   actual entry, and resume with the independent wake source. Verify
+   discovery and subsequent traffic without restarting Bluetooth.
+3. Active connection: pair/connect a remote peer, record its profile and
+   link state, then repeat host suspend/resume with independent wake.
+   Record traffic rates and whether traffic prevents entry. After resume,
+   distinguish a retained connection from a disconnect/reconnect and test
+   both traffic directions. An aborted suspend is not a successful cycle.
+4. Bluetooth-triggered host wake: choose an explicit supported remote
+   stimulus, for example a timestamped HID key report from a connected
+   keyboard. Confirm suspend entry before sending it; log the remote send
+   time and host receipt. Require wake before independent recovery, wake
+   source evidence consistent with the verified WiLink signal, and event
+   delivery after resume. Include a no-stimulus control interval. A timer,
+   baseband event, USB activity or local key wake cannot count as BT wake.
+5. Repeat idle, connected and remote-wake trials for a declared cycle count
+   and dwell time. Record every failure and controller/link state before
+   and after each cycle. Observe GPIO 179 with a suitable trace/logic
+   analyzer: no new nShutdown pulses may occur during suspend/resume.
+   Check KIM/UIM logs for unexpected restart or firmware download; normal
+   startup/shutdown pulses are a separate baseline. Reconnection alone
+   does not prove controller-state retention or absence of reset pulses.
+
+For every suspend trial retain pm_suspend_entry/exit traces where available,
+powerdomain previous/target-state evidence and wake-source diagnostics.
+Entry traces alone precede the low-power call and are insufficient: require
+the achieved state and a measurable suspended interval. Retain failures
+such as "Could not enter target state in pm_suspend", FIFO-busy errors,
+wake-lock/blocker state and immediate wake events. A screen going dark or
+a successful suspend request alone is not proof of entry. Avoid continuous
+serial polling or logging that keeps UARTs/host awake; record instrumentation
+and compare with a minimally instrumented run.
+
+Each result must include board/SoC revision, kernel commit and full config,
+bootloader/device tree, firmware filename/version or hash, UIM version,
+TTY baud/flow control, effective wake settings and power mode, intended
+and observed wake source, timestamped serial/kernel and remote logs,
+connection/traffic outcomes, cycle counts and reset observations. Mark
+missing measurements and blocked/aborted trials explicitly as inconclusive.
+
+Software validation and limits
+------------------------------
+Run git diff --check and the existing host regressions:
+  python3 tools/ti-st/kim_lifecycle_test.py
+  python3 tools/ti-st/kim_response_test.py
+Verify the board change contains only a comment and that built-in WiLink,
+modular WiLink and alternative rfkill preprocessing remains identical.
+Build shadow_cm11_defconfig and the modular WiLink/alternative rfkill
+selections with a compatible ARM toolchain when available. GNU make and an
+ARM cross compiler are absent from this environment, so no kernel builds
+were performed. Host checks do not validate hardware, suspend entry,
+controller retention or Bluetooth host-wake support.

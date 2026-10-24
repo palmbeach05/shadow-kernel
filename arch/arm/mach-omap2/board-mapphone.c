@@ -1854,10 +1854,12 @@ static int __init omap_hdq_init(void)
 
 #if defined(CONFIG_BT_WILINK) || defined (CONFIG_BT_WILINK_MODULE) 
 
-/* TODO: handle suspend/resume here.
-* Upon every suspend, make sure the wilink chip is capable enough to wake-up the
-* OMAP host.
-*/
+/*
+ * KIM PM callbacks are no-ops: they neither reset WiLink nor arm host wake.
+ * The ST HCI_LL UART sleep/wake handshake is separate from host suspend.
+ * UART wake support alone does not establish Bluetooth host-wake capability;
+ * see Documentation/ti-st-mapphone-host-wake.txt for device requirements.
+ */
 static int plat_kim_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	return 0;
