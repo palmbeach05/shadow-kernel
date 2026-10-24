@@ -696,8 +696,13 @@ long st_kim_start(void *kim_data)
 
 	do {
 		/* platform specific enabling code here */
-		if (pdata->chip_enable)
-			pdata->chip_enable(kim_gdata);
+		if (pdata->chip_enable) {
+			err = pdata->chip_enable(kim_gdata);
+			if (err) {
+				pr_err("chip enable failed: %ld", err);
+				return err;
+			}
+		}
 
 		/* Configure BT nShutdown to HIGH state */
 		gpio_set_value_cansleep(kim_gdata->nshutdown, GPIO_LOW);
@@ -750,6 +755,7 @@ long st_kim_start(void *kim_data)
 long st_kim_stop(void *kim_data)
 {
 	long err = 0;
+	int disable_err;
 	struct kim_data_s	*kim_gdata = (struct kim_data_s *)kim_data;
 	struct ti_st_plat_data	*pdata =
 		kim_gdata->kim_pdev->dev.platform_data;
@@ -787,8 +793,14 @@ long st_kim_stop(void *kim_data)
 	gpio_set_value_cansleep(kim_gdata->nshutdown, GPIO_LOW);
 
 	/* platform specific disable */
-	if (pdata->chip_disable)
-		pdata->chip_disable(kim_gdata);
+	if (pdata->chip_disable) {
+		disable_err = pdata->chip_disable(kim_gdata);
+		if (disable_err) {
+			pr_err("chip disable failed: %d", disable_err);
+			if (!err)
+				err = disable_err;
+		}
+	}
 	return err;
 }
 
