@@ -23,6 +23,32 @@ still disabling the low-level transport and releasing FM accounting.
 read_local_version() and the BTS event wait preserve negative wait results.
 Firmware selection and Bluetooth configuration are unchanged by this fix.
 
+Platform callback failure-path checklist (host regression)
+--------------------------------------------------------
+- Absent callbacks: startup, shutdown and existing retries remain unchanged.
+- Successful callbacks: enable runs once per attempt and disable once per
+  cleanup; reset, notifications and UART flush counts are checked.
+- Enable failure: return its error immediately, with no reset transitions,
+  notifications, waits, firmware download or shutdown callback.
+- Disable failure: finish shutdown and return the callback error when the
+  removal wait succeeded. A timeout or interrupted wait takes precedence.
+- Startup cleanup: preserve the startup error even when disable also fails;
+  interrupted startup or cleanup still prevents retries. Ordinary firmware
+  failures retain bounded retries and recovery on a later attempt.
+
+Repository-root callback and platform-data searches found only MAPPHONE's
+wilink_pdata, which has neither callback assigned. No in-tree platform-local
+rollback is needed. A platform enable callback must undo partial setup before
+returning failure; KIM must not wait for removal before installation starts.
+The callback return contract is documented in include/linux/ti_wilink_st.h.
+Source inspection of the ST core callers confirms these callback errors use
+the existing registration and unregistration propagation described above.
+
+Kernel builds are unavailable in this environment: GNU make and an ARM cross
+compiler are absent. The host checks compile the extracted lifecycle functions
+with warnings treated as errors; they do not establish kernel build success.
+Suspend/resume, UART sleep/wake and MAPPHONE reset ownership are unchanged.
+
 Manual device checks (not performed by the host test):
 
 1. With UIM running, start a configured radio and verify line-discipline
