@@ -333,7 +333,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 	unsigned char *action_ptr = NULL;
 	struct bts_action *action;
 	char bts_scr_name[40] = { 0 };	/* 40 char long bts scr name? */
-	const char *fw_names[4];
+	const char *fw_names[2];
 	int wr_room_space;
 	int cmd_size;
 	unsigned int i;
@@ -345,10 +345,8 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 		return err;
 	}
 
-	fw_names[0] = "ti-connectivity/TIInit_7.6.15.bts";
-	fw_names[1] = "TIInit_7.6.15.bts";
-	fw_names[2] = bts_scr_name;
-	fw_names[3] = bts_scr_name + sizeof("ti-connectivity/") - 1;
+	fw_names[0] = bts_scr_name;
+	fw_names[1] = bts_scr_name + sizeof("ti-connectivity/") - 1;
 
 	for (i = 0; i < ARRAY_SIZE(fw_names); i++) {
 		pr_info("kim: requesting firmware %s", fw_names[i]);
