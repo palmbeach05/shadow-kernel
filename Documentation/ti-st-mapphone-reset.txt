@@ -1,0 +1,62 @@
+MAPPHONE TI Shared Transport reset ownership
+============================================
+
+Change description for the reset ownership PR
+---------------------------------------------
+Remove the MAPPHONE chip_enable/chip_disable assignments and their private
+reset helpers. They duplicated KIM's GPIO reservation and startup/shutdown
+reset sequences, including treating an already reserved GPIO as available.
+KIM is now the sole reset owner for the MAPPHONE WiLink selection.
+wilink_pdata.nshutdown_gpio remains MAPPHONE_BT_RESET_GPIO (GPIO 179).
+
+KIM still requests the GPIO at probe, configures it output-low, and frees it
+on probe unwind or removal. Startup remains low for 5 ms then high for
+100 ms; shutdown remains low/high/low with 1 ms delays between transitions.
+The alternative non-WiLink/rfkill branch is unchanged. Generic platform
+callback error propagation is deferred to a separate PR. Suspend/resume
+callbacks and UART sleep/wake handling are unchanged; host-wake behavior
+remains unverified. No suspend/resume reset pulses are added.
+
+Source inspection and base limitations (2026-10-24)
+--------------------------------------------------
+Inspected AST outlines before focused source slices of board-mapphone.c,
+st_kim.c and ti_wilink_st.h. The removed board helpers contain only GPIO
+reservation, direction setup, reset pulses and private reservation bookkeeping;
+there are no additional regulator, clock or pin-mux operations to retain.
+Repository-wide reference inspection found no external users of the helpers.
+KIM's request, direction, start, stop and free paths remain unchanged.
+
+The inspected HEAD is a624fd0be4f6a7e2ba7f54296e3080beb66b66cc. The board
+file is identical to reviewed commit c52e216ff7d97fb92a93a6443c4a6729f033e088.
+Only local/remote-tracking 2.6.32.9 refs are available (30800700e8c3056bc81bc064d0c981db6dd272a8).
+Remote repository operations were prohibited and were not performed. The
+latest published 2.6.32.71 base and changes on it cannot be verified here.
+The publishing workflow must apply and review this focused change against
+the actual latest 2.6.32.71 source before publishing for that target.
+
+Build selections and validation
+-------------------------------
+shadow_cm11_defconfig selects MACH_MAPPHONE, BT_WILINK and TI_ST, with
+WL127X_RFKILL disabled. Board selection accepts BT_WILINK built-in or as a
+module; both use the same KIM platform data. With neither selected, the
+existing rfkill platform data, initialization and registration are retained.
+
+Software checks passed: host GCC preprocessing of the board Bluetooth section
+for built-in WiLink, modular WiLink and alternative rfkill; comparison of the
+unchanged alternative branch; absence of removed helper references; existing
+python3 tools/ti-st/kim_lifecycle_test.py; and git diff --check. These are host
+and source checks, not kernel builds or hardware validation.
+
+Kernel builds: not performed; GNU make and an ARM cross compiler are absent
+from this environment. Build shadow_cm11_defconfig with a compatible ARM
+toolchain and separately build the module and alternative rfkill selections
+in a suitable environment. Source checks do not establish build success.
+
+Hardware tests: not performed. On MAPPHONE, retain serial logs and check:
+1. Repeated Bluetooth enable/disable: one GPIO reservation owner, one reset
+   sequence per startup/shutdown attempt, and no GPIO-busy errors.
+2. With known-working TIInit_7.2.31.bts, discovery, pairing and reconnection
+   across repeated enable/disable cycles. Firmware selection is unchanged.
+3. Suspend/resume with Bluetooth idle and connected: reconnection/traffic,
+   host wake and UART sleep/wake operation. Check that suspend/resume adds
+   no reset pulses. Record board, firmware and build used for each result.
