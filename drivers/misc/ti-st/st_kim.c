@@ -62,64 +62,173 @@ static struct platform_device *st_get_plat_device(int id)
 	return st_kim_devices[id];
 }
 
-/*
- * validate_firmware_response -
- *	function to return whether the firmware response was proper
- *	in case of error don't complete so that waiting for proper
- *	response times out
- */
-static void validate_firmware_response(struct kim_data_s *kim_gdata)
+/* All response and parser state is serialized by response_lock. */
+static void kim_clear_response(struct kim_data_s *kim)
 {
-	struct sk_buff *skb = kim_gdata->rx_skb;
+	unsigned long flags;
 
-	if (!skb)
-		return;
-	if (skb->len < 6) {
-		pr_err("malformed firmware response: only %u bytes received",
-		       skb->len);
-		goto invalid_response;
+	spin_lock_irqsave(&kim->response_lock, flags);
+	if (kim->response_pending) {
+		kim->response_result = -ESHUTDOWN;
+		complete_all(&kim->kim_rcvd);
 	}
+	kim->response_pending = false;
+	kim->expected_len = 0;
+	kim->read_version = false;
+	kfree_skb(kim->rx_skb);
+	kim->rx_skb = NULL;
+	kim->rx_count = 0;
+	kim->rx_state = ST_W4_PACKET_TYPE;
+	spin_unlock_irqrestore(&kim->response_lock, flags);
+}
 
-	/*
-	 * these magic numbers are the position in the response buffer which
-	 * allows us to distinguish whether the response is for the read
-	 * version info. command
-	 */
-	if (skb->data[2] == 0x01 && skb->data[3] == 0x01 &&
-			skb->data[4] == 0x10 && skb->data[5] == 0x00) {
-		if (skb->len < 14) {
-			pr_err("truncated read-local-version response: only %u bytes received",
-			       skb->len);
-			goto invalid_response;
-		}
-		if (skb->len > sizeof(kim_gdata->resp_buffer)) {
-			pr_err("read-local-version response too large: %u bytes received, buffer holds %u",
-			       skb->len,
-			       (unsigned int)sizeof(kim_gdata->resp_buffer));
-			goto invalid_response;
-		}
-		/* fw version response */
-		memcpy(kim_gdata->resp_buffer,
-		       skb->data, skb->len);
-		kim_gdata->rx_state = ST_W4_PACKET_TYPE;
-		kim_gdata->rx_skb = NULL;
-		kim_gdata->rx_count = 0;
-	} else if (unlikely(skb->data[5] != 0)) {
-		pr_err("no proper response during fw download");
-		pr_err("data6 %x", skb->data[5]);
-		goto invalid_response;
+static void kim_arm_response(struct kim_data_s *kim, const u8 *event,
+		unsigned int len, u16 opcode, bool version)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&kim->response_lock, flags);
+	reinit_completion(&kim->kim_rcvd);
+	memcpy(kim->expected_event, event, len);
+	kim->expected_len = len;
+	kim->expected_opcode = opcode;
+	kim->read_version = version;
+	kim->response_result = -EINPROGRESS;
+	kim->response_pending = true;
+	spin_unlock_irqrestore(&kim->response_lock, flags);
+}
+
+static long kim_wait_response(struct kim_data_s *kim)
+{
+	unsigned long flags;
+	long ret;
+
+	ret = wait_for_completion_interruptible_timeout(&kim->kim_rcvd,
+			msecs_to_jiffies(CMD_RESP_TIME));
+	spin_lock_irqsave(&kim->response_lock, flags);
+	ret = ret > 0 ? kim->response_result : (ret ? ret : -ETIMEDOUT);
+	kim->response_pending = false;
+	kim->expected_len = 0;
+	kim->read_version = false;
+	spin_unlock_irqrestore(&kim->response_lock, flags);
+	kim_clear_response(kim);
+	return ret;
+}
+
+/* Called with response_lock held; skb->data excludes the HCI type byte. */
+static void validate_firmware_response(struct kim_data_s *kim)
+{
+	struct sk_buff *skb = kim->rx_skb;
+	const u8 *data = skb->data;
+	unsigned int i, status = 0, credits = 0;
+	int result = 0;
+
+	if (!kim->response_pending || skb->len < 2 ||
+	    skb->len != data[1] + 2 || data[0] != kim->expected_event[0])
+		goto out;
+
+	switch (data[0]) {
+	case 0x0e: /* Command Complete: ncmd, opcode, return parameters */
+		if (skb->len < 6 ||
+		    (data[3] | (data[4] << 8)) != kim->expected_opcode)
+			goto out;
+		status = 5;
+		credits = 2;
+		break;
+	case 0x0f: /* Command Status: status, ncmd, opcode */
+		if (skb->len != 6 ||
+		    (data[4] | (data[5] << 8)) != kim->expected_opcode)
+			goto out;
+		status = 2;
+		credits = 3;
+		break;
+	default:
+		/* Vendor events have no generic opcode/status layout. */
+		break;
 	}
-	/* becos of all the script being downloaded */
-	complete_all(&kim_gdata->kim_rcvd);
+	/* A matching command failure terminates the transaction explicitly. */
+	if (status && data[status]) {
+		result = -EIO;
+	} else {
+		if (skb->len != kim->expected_len)
+			goto out;
+		for (i = 0; i < skb->len; i++) {
+			/* Command credits are controller flow control, not a match. */
+			if (credits && i == credits)
+				continue;
+			if (kim->read_version && i >= 6)
+				continue;
+			if (data[i] != kim->expected_event[i])
+				goto out;
+		}
+		if (kim->read_version)
+			memcpy(kim->resp_buffer, data, skb->len);
+	}
+	kim->response_result = result;
+	kim->response_pending = false;
+	complete_all(&kim->kim_rcvd);
+out:
 	kfree_skb(skb);
-	return;
+}
 
-invalid_response:
-	kim_gdata->rx_state = ST_W4_PACKET_TYPE;
-	kim_gdata->rx_skb = NULL;
-	kim_gdata->rx_count = 0;
-	kfree_skb(skb);
-	return;		/* keep waiting for the proper response */
+/*
+ * BTS wait data is a complete H4 event, including packet type 0x04.
+ * Validate both length declarations before inspecting any event bytes.
+ */
+static int kim_validate_wait(const struct bts_action *action, u16 opcode,
+		const u8 **event, unsigned int *len)
+{
+	const struct bts_action_wait *wait;
+	const u8 *data;
+
+	if (action->size < sizeof(*wait))
+		return -EINVAL;
+	wait = (const void *)action->data;
+	if (wait->size < 3 || wait->size > 258 ||
+	    wait->size != action->size - sizeof(*wait))
+		return -EINVAL;
+	data = wait->data;
+	if (data[0] != 0x04 || data[2] != wait->size - 3)
+		return -EINVAL;
+	if (data[1] == 0x0e) {
+		if (wait->size < 7 ||
+		    (data[4] | (data[5] << 8)) != opcode || data[6])
+			return -EINVAL;
+	} else if (data[1] == 0x0f) {
+		if (wait->size != 7 ||
+		    (data[5] | (data[6] << 8)) != opcode || data[3])
+			return -EINVAL;
+	}
+	*event = data + 1;
+	*len = wait->size - 1;
+	return 0;
+}
+
+/* Find the paired wait before transmitting, including across delays/remarks. */
+static int kim_prepare_command(struct kim_data_s *kim, const u8 *ptr,
+		size_t len, u16 opcode)
+{
+	const struct bts_action *action;
+	const u8 *event;
+	unsigned int event_len;
+	int err;
+
+	while (len >= sizeof(*action)) {
+		action = (const void *)ptr;
+		if (action->size > len - sizeof(*action))
+			return -EINVAL;
+		if (action->type == ACTION_WAIT_EVENT) {
+			err = kim_validate_wait(action, opcode, &event, &event_len);
+			if (!err)
+				kim_arm_response(kim, event, event_len, opcode, false);
+			return err;
+		}
+		if (action->type != ACTION_DELAY && action->type != ACTION_REMARKS)
+			return -EINVAL;
+		len -= sizeof(*action) + action->size;
+		ptr += sizeof(*action) + action->size;
+	}
+	return -EINVAL;
 }
 
 /*
@@ -241,22 +350,21 @@ static long read_local_version(struct kim_data_s *kim_gdata, char *bts_scr_name)
 	unsigned short version = 0, chip = 0, min_ver = 0, maj_ver = 0;
 	static const char read_ver_cmd[] = { 0x01, 0x01, 0x10, 0x00 };
 	long time_left;
+	static const u8 version_event[14] = { 0x0e, 12, 1, 1, 0x10, 0 };
 
 	pr_debug("%s", __func__);
 
-	reinit_completion(&kim_gdata->kim_rcvd);
+	kim_arm_response(kim_gdata, version_event, sizeof(version_event),
+			0x1001, true);
 	if (4 != st_int_write(kim_gdata->core_data, read_ver_cmd, 4)) {
 		pr_err("kim: couldn't write 4 bytes");
+		kim_clear_response(kim_gdata);
 		return -EIO;
 	}
 
-	time_left = wait_for_completion_interruptible_timeout(
-		&kim_gdata->kim_rcvd, msecs_to_jiffies(CMD_RESP_TIME));
-	if (time_left <= 0) {
-		pr_err(" waiting for ver info- timed out or received signal");
-		return time_left ? time_left : -ETIMEDOUT;
-	}
-	reinit_completion(&kim_gdata->kim_rcvd);
+	time_left = kim_wait_response(kim_gdata);
+	if (time_left)
+		return time_left;
 	/*
 	 * the positions 12 & 13 in the response buffer provide with the
 	 * chip, major & minor numbers
@@ -333,11 +441,12 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 	unsigned char *action_ptr = NULL;
 	struct bts_action *action;
 	char bts_scr_name[40] = { 0 };	/* 40 char long bts scr name? */
-	const char *fw_names[4];
+	const char *fw_names[2];
 	int wr_room_space;
 	int cmd_size;
 	unsigned int i;
 	unsigned long timeout;
+	bool awaiting_response = false;
 
 	err = read_local_version(kim_gdata, bts_scr_name);
 	if (err != 0) {
@@ -345,10 +454,8 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 		return err;
 	}
 
-	fw_names[0] = "ti-connectivity/TIInit_7.6.15.bts";
-	fw_names[1] = "TIInit_7.6.15.bts";
-	fw_names[2] = bts_scr_name;
-	fw_names[3] = bts_scr_name + sizeof("ti-connectivity/") - 1;
+	fw_names[0] = bts_scr_name;
+	fw_names[1] = bts_scr_name + sizeof("ti-connectivity/") - 1;
 
 	for (i = 0; i < ARRAY_SIZE(fw_names); i++) {
 		pr_info("kim: requesting firmware %s", fw_names[i]);
@@ -408,6 +515,10 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 
 		switch (action->type) {
 		case ACTION_SEND_COMMAND:	/* action send */
+			if (awaiting_response) {
+				err = -EINVAL;
+				goto release_firmware;
+			}
 			pr_debug("S");
 			if (action->size < offsetof(struct hci_command, speed)) {
 				pr_err("malformed firmware: send command payload is too short (%u bytes)",
@@ -416,7 +527,8 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 				goto release_firmware;
 			}
 			action_ptr = &action->data[0];
-			if (((struct hci_command *)action_ptr)->plen !=
+			if (((struct hci_command *)action_ptr)->prefix != 0x01 ||
+			    ((struct hci_command *)action_ptr)->plen !=
 			    action->size - offsetof(struct hci_command, speed)) {
 				pr_err("malformed firmware: send command payload length does not match plen");
 				err = -EINVAL;
@@ -463,17 +575,20 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 				err = -ETIMEDOUT;
 				goto release_firmware;
 			}
-			/*
-			 * reinit completion before sending for the
-			 * relevant wait
-			 */
-			reinit_completion(&kim_gdata->kim_rcvd);
+			/* Arm the paired BTS wait before a response can arrive. */
+			err = kim_prepare_command(kim_gdata,
+				ptr + sizeof(*action) + action->size,
+				len - sizeof(*action) - action->size,
+				((struct hci_command *)action_ptr)->opcode);
+			if (err)
+				goto release_firmware;
 
 			/*
 			 * Free space found in uart buffer, call st_int_write
 			 * to send current firmware command to the uart tx
 			 * buffer.
 			 */
+			awaiting_response = true;
 			err = st_int_write(kim_gdata->core_data,
 			((struct bts_action_send *)action_ptr)->data,
 					   action->size);
@@ -494,16 +609,14 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 			break;
 		case ACTION_WAIT_EVENT:  /* wait */
 			pr_debug("W");
-			err = wait_for_completion_interruptible_timeout(
-					&kim_gdata->kim_rcvd,
-					msecs_to_jiffies(CMD_RESP_TIME));
-			if (err <= 0) {
-				pr_err("response timeout/signaled during fw download ");
-				/* timed out */
-				err = err ? err : -ETIMEDOUT;
+			if (!awaiting_response) {
+				err = -EINVAL;
 				goto release_firmware;
 			}
-			reinit_completion(&kim_gdata->kim_rcvd);
+			awaiting_response = false;
+			err = kim_wait_response(kim_gdata);
+			if (err)
+				goto release_firmware;
 			break;
 		case ACTION_DELAY:	/* sleep */
 			pr_info("sleep command in scr");
@@ -524,6 +637,7 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 	err = 0;
 
 release_firmware:
+	kim_clear_response(kim_gdata);
 	release_firmware(kim_gdata->fw_entry);
 	kim_gdata->fw_entry = NULL;
 	return err;
@@ -540,12 +654,15 @@ void st_kim_recv(void *disc_data, const u8 *data, const u8 *fp, size_t count)
 {
 	struct st_data_s	*st_gdata = (struct st_data_s *)disc_data;
 	struct kim_data_s	*kim_gdata = st_gdata->kim_data;
+	unsigned long flags;
 
 	/*
 	 * proceed to gather all data and distinguish read fw version response
 	 * from other fw responses when data gathering is complete
 	 */
+	spin_lock_irqsave(&kim_gdata->response_lock, flags);
 	kim_int_recv(kim_gdata, data, fp, count);
+	spin_unlock_irqrestore(&kim_gdata->response_lock, flags);
 	return;
 }
 
@@ -638,6 +755,7 @@ long st_kim_stop(void *kim_data)
 		kim_gdata->kim_pdev->dev.platform_data;
 	struct tty_struct	*tty = kim_gdata->core_data->tty;
 
+	kim_clear_response(kim_gdata);
 	INIT_COMPLETION(kim_gdata->ldisc_installed);
 
 	if (tty) {	/* can be called before ldisc is installed */
@@ -973,6 +1091,7 @@ static int kim_probe(struct platform_device *pdev)
 	}
 	/* get reference of pdev for request_firmware */
 	kim_gdata->kim_pdev = pdev;
+	spin_lock_init(&kim_gdata->response_lock);
 	init_completion(&kim_gdata->kim_rcvd);
 	init_completion(&kim_gdata->ldisc_installed);
 
@@ -1075,6 +1194,7 @@ static int kim_remove(struct platform_device *pdev)
 	gpio_free(kim_gdata->nshutdown);
 	pr_info("nshutdown GPIO freed");
 
+	kim_clear_response(kim_gdata);
 	kim_gdata->core_data->kim_data = NULL;
 	st_core_exit(kim_gdata->core_data);
 	kim_gdata->core_data = NULL;
