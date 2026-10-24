@@ -52,6 +52,7 @@ static long download_firmware(struct kim_data_s *data) {
  assert(data == active); downloads++;
  return succeed_on && downloads == succeed_on ? 0 : firmware_result;
 }
+static void kim_clear_response(struct kim_data_s *kim) { (void)kim; }
 long st_kim_stop(void *);
 '''
 cases = r'''
