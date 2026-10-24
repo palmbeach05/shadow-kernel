@@ -151,7 +151,9 @@ or PHY-resume failure keeps IRQs/timers quiesced, requests standby and
 releases the acquired clock; core restore is skipped.  Clock ownership is tracked so retries do not acquire
 a duplicate reference.  Suspend errors attempt wrapper/PHY rollback and only
 unquiesce after successful rollback; rollback failure is logged.  A failed
-resume must be retried before another suspend can save context.  The existing
+resume now receives bounded synchronous retries before returning failure;
+another suspend cannot save context while restoration remains failed. See
+musb-resume-recovery.txt for the retry policy and validation procedure.  The existing
 OMAP clock callback reports failure without changing clock state.  During
 initialization the clock is already on, so the old second enable is removed.
 Other platforms keep their existing clock ownership and resume_noirq path.

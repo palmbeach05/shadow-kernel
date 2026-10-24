@@ -32,6 +32,7 @@
 #include <linux/list.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/delay.h>
 
 #include <asm/mach-types.h>
 #include <mach/hardware.h>
@@ -447,7 +448,7 @@ static int omap_musb_restore_wrapper(struct musb *musb)
 	return 0;
 }
 
-static int omap_musb_pm_resume(struct musb *musb)
+static int omap_musb_pm_resume_once(struct musb *musb)
 {
 	int ret, undo;
 
@@ -492,6 +493,39 @@ cleanup:
 			musb->omap_context.clock_off = 1;
 		}
 	}
+	return ret;
+}
+
+/* Three total attempts, with no work left behind after the PM callback.
+ * The device semaphore held by the PM core also excludes unbind/removal and
+ * another suspend.  Never hold musb->lock across PHY calls or retry delays.
+ * Clock failures leave ownership unchanged; wrapper writes replay saved
+ * policy without resetting the controller.  The supported PHY callbacks are
+ * repeatable: CPCAP/NOP do nothing and TWL4030 guards power-up with asleep.
+ * Re-audit that contract before adding a PHY with a fallible resume callback.
+ */
+#define OMAP_MUSB_RESUME_ATTEMPTS 3
+#define OMAP_MUSB_RESUME_DELAY_MS 20
+
+static int omap_musb_pm_resume(struct musb *musb)
+{
+	int attempt, ret;
+
+	if (!musb->omap_context.quiesced)
+		return -EINVAL;
+
+	for (attempt = 0; attempt < OMAP_MUSB_RESUME_ATTEMPTS; attempt++) {
+		if (attempt)
+			msleep(OMAP_MUSB_RESUME_DELAY_MS);
+		ret = omap_musb_pm_resume_once(musb);
+		if (!ret)
+			return 0;
+	}
+
+	dev_err(musb->controller,
+		"USB restoration failed after %d attempts: %d; "
+		"controller remains quiesced, reboot required\n",
+		OMAP_MUSB_RESUME_ATTEMPTS, ret);
 	return ret;
 }
 
