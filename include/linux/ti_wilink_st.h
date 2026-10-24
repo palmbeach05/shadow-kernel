@@ -466,9 +466,13 @@ struct gps_event_hdr {
  * @suspend:
  * @resume: legacy PM routines hooked to platform specific board file, so as
  *	to take chip-host interface specific action.
- * @chip_enable:
- * @chip_disable: Platform/Interface specific mux mode setting, GPIO
- *	configuring, Host side PM disabling etc.. can be done here.
+ * @chip_enable: Optional platform setup (mux, GPIO, host PM). Return zero
+ *	on success or a negative errno on failure. Undo partial setup on failure;
+ *	KIM returns the error without toggling reset or calling chip_disable.
+ * @chip_disable: Optional platform teardown. Return zero on success or a
+ *	negative errno on failure. Called after KIM shutdown even if the
+ *	line-discipline removal wait fails; its error is returned only when
+ *	there is no earlier shutdown error.
  * @chip_asleep:
  * @chip_awake: Chip specific deep sleep states is communicated to Host
  *	specific board-xx.c to take actions such as cut UART clocks when chip
