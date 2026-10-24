@@ -1,0 +1,257 @@
+MUSB core suspend/resume context backport
+========================================
+
+Implementation reference
+------------------------
+The context layout and save/restore coverage are adapted from Linux v2.6.39:
+https://github.com/torvalds/linux/blob/v2.6.39/drivers/usb/musb/musb_core.c
+https://github.com/torvalds/linux/blob/v2.6.39/drivers/usb/musb/musb_core.h
+
+The original backport was described as an adaptation to 2.6.32.44,
+not a direct application of stable commit
+262e2d9d559334e09bc80516132ea99d82f97b8c.  The local tree uses
+musb->config->dyn_fifo and has no upstream FIFO/target read helpers or ULPI
+bus-control accessor.  Reads therefore use this tree's register definitions.
+FRAME is a read-only frame counter and is not restored.  FADDR is included
+for peripheral and single-point host operation.  Host type, interval and
+multipoint target state is guarded by CONFIG_USB_MUSB_HDRC_HCD; Blackfin's
+fixed FIFOs and absent multipoint registers are excluded at compile time.
+
+Only initialized, configured endpoints are visited, bounded by nr_endpoints
+and MUSB_C_NUM_EPS.  EP0 uses CSR0 and host TYPE0/NAKLIMIT0, without accessing
+its reserved nonzero-endpoint registers.  Both helpers explicitly select
+INDEX, including on flat-register platforms where FIFO setup remains indexed,
+and restore the pre-suspend INDEX after their loops.  Dynamic FIFO size and
+address state includes double-buffer configuration.  Static FIFO layout is
+hardware-defined and is not written.
+
+Save runs under the existing lock before clock disable.  On the core-only
+path restore runs in resume_noirq after set_clock/clk_enable succeeds.
+The OMAP3430/OMAP3630 implementation uses the sleepable resume sequence
+described below.
+The clock failure return is retained, so failure performs no core register
+accesses.
+FIFO layout and host routing precede endpoint CSR restoration; controller
+interrupt enables are restored last.  musb_dma_completion is unchanged.
+
+OMAP wrapper recovery and PHY compatibility
+-------------------------------------------
+This implementation supersedes the OMAP3430-only proposal in #58, retaining
+its core context work from #57.  It implements wrapper recovery for runtime
+cpu_is_omap3430() and cpu_is_omap3630() with CONFIG_ARCH_OMAP3430 and CONFIG_PM.
+OMAP3630 is selected by CONFIG_ARCH_OMAP3430 in this tree; the runtime CPU
+predicates distinguish its 0x3630 type from OMAP3430's 0x3430 type.
+
+The target is OMAP3630 MAPPHONE with arch/arm/configs/shadow_cm11_defconfig,
+not shadow_recovery_defconfig.  The local CM11 reference selects OMAP3,
+OMAP34XX, ARCH_OMAP3430, MACH_MAPPHONE, PM, USB_MUSB_OTG, USB_INVENTRA_DMA and
+CPCAP_USB.  board-mapphone.c supplies MUSB_INTERFACE_ULPI and OTG mode;
+board-mapphone-cpcap-client.c registers the CPCAP transceiver and detector.
+Reference configuration:
+https://raw.githubusercontent.com/palmbeach05/shadow-kernel/2.6.32.9/arch/arm/configs/shadow_cm11_defconfig
+
+At the historical #58 review, the supplied diff was reviewed against a local
+snapshot with a single root commit containing that implementation and local
+branch 2.6.32.9 pointing to the same snapshot.  #58 target-branch metadata and its
+pre-change baseline were unavailable locally; no remote repository operations
+were performed during that review.  Replacement ancestry and equality to the
+linked reference configuration still require verification by the replacement PR workflow.
+
+Compatibility:
+- OMAP3430 with TWL4030: existing sleepable wrapper/PHY callback path retained.
+- OMAP3630 MAPPHONE with CPCAP: wrapper restoration implemented, conditional
+  on board-managed CPCAP state/power retention or accessory-driver recovery.
+  CPCAP power-loss recovery is not implemented or hardware-verified.
+- OMAP3630 with another ULPI PHY: wrapper code is selected, but that board's
+  PHY readiness, supplier ordering and power retention require validation.
+
+The Makefile also selects omap2430.c for CONFIG_ARCH_OMAP2430, but that
+variant retains the core-only PM path:
+its retention and external PHY requirements have not been verified here.
+OMAP4 and other integrations are outside this driver's selected hardware.
+
+Hardware reference: TI OMAP35x TRM SPRUF98Y, sections 23.1.3.1,
+23.1.5.1, 23.1.5.4 and tables 23-11, 23-15 and 23-19:
+https://www.ti.com/lit/ug/spruf98y/spruf98y.pdf
+The controller belongs to the CORE power domain; hardware reset resets the
+whole module.  Its functional clock comes from the external ULPI PHY.
+The supported interface is 12-pin SDR ULPI.  Wrapper recovery uses 32-bit
+accesses, releases ENABLEFORCE before changing idle modes, and separates
+AUTOIDLE enable from idle-mode programming.  Revision/status registers are
+read-only; SIMENABLE is simulation-only and must not be replayed.  The image
+contains SYSCONFIG without SOFTRESET, INTERFSEL PHYSEL, and FORCESTDBY
+ENABLEFORCE.  OMAP3630 additionally saves and restores OTG_BIGENDIAN bit 0
+at offset 0x418 before core/DMA access; this register is not accessed on
+OMAP3430 or OMAP2430.  OMAP36xx hardware reference: TI SWPU177AA, sections
+22.1.3.1, 22.1.4.3.1, 22.1.5.1, 22.1.5.4 and tables 22-9 through 22-23:
+https://www.ti.com/lit/ug/swpu177n/swpu177n.pdf
+(The TI URL currently serves revision AA.)  The OMAP36xx wrapper has the same
+base 0x480ab000 and configuration offsets, 32-bit access requirement, CORE
+power domain, external 60 MHz ULPI clock and force-standby/idle sequencing.
+INTERFSEL bits 31:2 are reserved, including the older EXTCP definition; only
+PHYSEL is saved.  Only 12-pin SDR ULPI is supported, and PHYSEL resets to 1.
+Suspend rejects another OMAP3630 interface selection.  Restore avoids writing
+an unchanged PHYSEL; an unexpected OMAP3630 mismatch fails before core access
+rather than changing interfaces while the external functional clock may run.
+No new controller reset or PHY clock gating is introduced.  It preserves the
+tree's OMAP3430 AUTOIDLE workaround rather than imposing the manual's generic
+smart-idle policy.  OMAP3630 retains its existing AUTOIDLE setting
+independently of the OMAP3430 workaround.
+
+The implemented sequence is:
+1. In regular suspend, disable/synchronize the controller IRQ and the separate
+   Inventra DMA IRQ, if allocated.  Cancel the idle timer and initialized OTG
+   timer synchronously, remembering pending deadlines.  Save core registers
+   under musb->lock while the clock is still enabled.
+2. After unlocking, save wrapper configuration, request force standby/wakeup,
+   suspend the transceiver and release the interface clock once.  These new
+   system PM callbacks do not call the init/exit platform suspend helper.
+3. Skip the core resume_noirq work on this OMAP path.  In regular resume,
+   acquire the interface clock once, restore wrapper access and PHYSEL, then
+   the saved idle/standby policy.  Flush wrapper writes and resume the PHY.
+   Only then restore core context under the lock, rearm pending timers and
+   enable the IRQs.  Expired timers are scheduled for the next tick.  CPCAP
+   cable notifications are serialized with PM by a sleepable mutex, including
+   request givebacks that drop musb->lock.  The quiesced flag and most recent
+   deferred cable state are protected by musb->lock.  A disconnect is retained
+   before a later reconnect so the old session is torn down.  Events are
+   applied after core restore (also on successful suspend rollback), before
+   enabling IRQs.
+
+The otg_set_suspend API explicitly permits sleeping.  TWL4030 uses I2C and
+regulators and restores PHY power, clocks and ULPI mode; these operations
+must run outside musb->lock and outside noirq.  CPCAP and NOP transceiver
+set_suspend callbacks are no-ops in this tree.  They provide no evidence of
+PHY recovery after power loss.  There is no generic ULPI register image or
+PHY-ready polling here: callback success is the readiness contract.  In
+particular, TWL4030 currently hides some I2C/regulator failures by returning
+zero.  The platform must also resume the PHY's I2C/regulator suppliers before
+this callback; this old API does not establish device dependency links.
+
+CPCAP ownership trace (source inspection, not hardware evidence):
+- cpcap_usb_setup() in drivers/usb/otg/cpcap-usb.c hands transceiver control
+  from SPI to ULPI at probe.  cpcap_set_suspend() does nothing; the transceiver
+  has no system suspend/resume callbacks and does not re-run setup on resume.
+- drivers/mfd/cpcap-usb-det.c owns the VUSB regulator and accessory-dependent
+  USBC1/USBC2/USBC3 programming.  vusb_enable()/vusb_disable() also manage a
+  suspend wakelock.  configure_hardware() selects USB/charger/disconnected
+  behavior and notifies MUSB.  Its suspend callback only masks VBUSVLD; it
+  does not disable VUSB or replay USB setup on resume.
+- drivers/mfd/cpcap-core.c system PM only suspends/resumes CPCAP IRQ handling.
+  There is no general resume-time USB register recovery in these paths.
+Therefore MUSB does not reset CPCAP, re-run its probe setup, enable VUSB or
+add SPI writes to its no-op callback.  Those would duplicate accessory policy
+and could disrupt charging or cable detection.  Retention is a platform
+precondition, not a measured result; disconnected accessories may deliberately
+have VUSB disabled.  Loss of CPCAP power or ULPI state needs separate recovery
+in the owner driver, with supplier ordering and board evidence.  Notification
+deferral protects controller MMIO but does not freeze CPCAP accessory work.
+
+Clock-enable failure returns before wrapper or core MMIO.  Wrapper-validation
+or PHY-resume failure keeps IRQs/timers quiesced, requests standby and
+releases the acquired clock; core restore is skipped.  Clock ownership is
+tracked so retries do not acquire a duplicate reference, including when a
+cleanup disable fails and leaves the reference held.  Suspend errors attempt
+wrapper/PHY rollback and only unquiesce after successful rollback; rollback failure is logged.  A failed
+resume now receives bounded synchronous retries before returning failure;
+another suspend cannot save context while restoration remains failed.  There
+are at most three total attempts, with 20 ms between failed attempts; suspend
+rollback uses the same policy.  See musb-resume-recovery.txt for current base
+verification, validation results and the retry procedure.  The existing
+OMAP clock callback reports failure without changing clock state.  During
+initialization the clock is already on, so the old second enable is removed.
+Other platforms keep their existing clock ownership and resume_noirq path.
+
+This is untested off-mode recovery support, not evidence of working off-mode
+USB.  Normal clock gating does not prove context loss or PHY recovery.  FIFO
+contents, in-flight DMA state, pad mux/PRCM restoration, PHY-specific state
+not recovered by set_suspend, and wrapper state on other platforms (including
+TUSB6010) remain outside this image.  Transfers must already be quiescent.
+Remote wakeup and board-specific power sequencing require hardware validation.
+
+Validation record
+-----------------
+Core backport inspection record (from #57):
+- AST outlines of musb_core.h, musb_core.c and omap2430.c before source review.
+- Static preprocessor/AST checks of the added structures and helpers with PM
+  on/off, host support on/off, and normal, Blackfin and TUSB6010 register
+  guards (12 combinations).  Checked register macro availability and matching
+  saved/restored fields.  These checks are not kernel compilation or tests
+  of register behavior.
+- Static review of endpoint bounds, INDEX selection/restoration, FIFO and
+  interrupt ordering, and the clock-enable failure path.
+- Verified musb_dma_completion and existing OMAP clock error handling remain
+  unchanged; git diff --check passed.
+
+OMAP3430-only inspection record (from #58):
+- Reviewed AST outlines, OMAP variant selection, wrapper register definitions,
+  clock callback ownership/error semantics, transceiver implementations,
+  controller/DMA IRQ registration and idle/OTG timer callers.
+- Reviewed the TI hardware reference above and checked PM callback ordering,
+  CONFIG_PM/CONFIG_ARCH_OMAP3430 guards and non-OMAP fallback by source review.
+- git diff --check passed.  No repository code was executed.
+
+Replacement validation (2026-10-16):
+- Compared the local CM11 selections with the driver's Kconfig/Makefile,
+  runtime CPU predicates and MAPPHONE board setup.  Source compatibility
+  inspection is not a generated Kconfig or compiler result.
+- Reviewed SWPU177AA wrapper programming/register definitions and the CPCAP
+  transceiver, detection, regulator ownership and parent PM paths.
+- Build result: blocked before compilation.  `make --version` and the CM11
+  build invocation fail because make is absent; neither arm-linux-gnueabi-gcc
+  nor arm-linux-gnueabihf-gcc is installed.  No successful configuration,
+  object build or full kernel build is claimed.
+- Software checks: a temporary host GCC gnu89 harness compiled the extracted
+  PM callbacks and notification deferral code with mocked MMIO, clocks, PHY,
+  IRQs and timers.  OTG/Inventra DMA and peripheral/PIO variants passed
+  simulated wrapper-loss, OMAP3430 register exclusion, invalid PHYSEL,
+  clock/PHY failure, rollback/retry, timer/IRQ balance and cable deferral
+  checks.  This is not kernel compilation, device behavior or hardware proof.
+- git diff --check passed.
+- Hardware result: no target hardware tests were run.  OMAP3630 wrapper
+  support is implemented, but off-mode and CPCAP recovery are unverified.
+
+Required build in an environment with GNU make and a compatible ARM toolchain
+(use a separate output directory and retain logs):
+  make O=/tmp/shadow-cm11-build ARCH=arm CROSS_COMPILE=arm-eabi- shadow_cm11_defconfig
+  make O=/tmp/shadow-cm11-build ARCH=arm CROSS_COMPILE=arm-eabi- -j4 zImage
+Compare the generated .config with shadow_cm11_defconfig, specifically PM,
+OMAP3/OMAP3430, MAPPHONE, CPCAP, MUSB OTG and Inventra DMA selections.
+
+Required follow-up with a suitable toolchain and target configuration:
+- Build OMAP2430 and OMAP3430/OMAP34XX host-only, peripheral-only and OTG
+  configurations with CONFIG_PM=y, plus host/peripheral CONFIG_PM=n builds.
+  Cover CONFIG_MUSB_PIO_ONLY and CONFIG_USB_INVENTRA_DMA where supported.
+- Build DaVinci static FIFO and TUSB6010 dynamic FIFO configurations, and
+  Blackfin fixed FIFO configurations, with host/peripheral and PM guards.
+  Full builds may expose pre-existing issues: without CONFIG_HAVE_CLK the
+  local clk_enable stub expands to a statement, whereas the inherited
+  resume error handling assigns its result.  This unrelated stub is unchanged.
+- Check normal host enumeration and transfers, including a downstream hub
+  for multipoint routing, and peripheral enumeration and data transfers.
+  Exercise OTG roles, supported speeds, endpoint directions, PIO and DMA.
+- Repeat suspend/resume with a connected device, disconnected cable and idle
+  controller; check transfers afterward, wakeup where supported, interrupt
+  behavior, nonzero INDEX preservation, FIFO layout and clock balance.
+  Inject clock-enable failure and confirm its error reaches the PM caller
+  without register accesses, then check recovery on a later successful resume.
+  Inject PHY suspend/resume and clock-disable errors; check rollback, retained
+  IRQ/timer quiescence on recovery failure, and one clock reference per active
+  controller.  Check both allocated DMA IRQ and PIO-only configurations.
+  Confirm I2C/regulator suppliers are available before the PHY callback and
+  check for sleep-in-atomic/IRQ warnings.  Exercise pending idle/OTG timers.
+- Separately force real off-mode context loss and verify it occurred using
+  platform power-state evidence.  Check wrapper, PHY, core and endpoint
+  register recovery and USB operation over repeated cycles.  Clock gating
+  alone does not demonstrate context-loss recovery.  Record silicon revision,
+  board/PHY, role, CORE previous power state and recovered wrapper values;
+  distinguish OMAP3630/CPCAP, OMAP3430/TWL4030 and unchanged OMAP2430 results.
+  Capture SYSCONFIG, INTERFSEL, FORCESTDBY and OMAP3630 BIGENDIAN before/after
+  actual CORE context loss.  Record CPCAP VUSB and USBC state retention;
+  verify detection/charging policy after cable insertion/removal during sleep
+  and while resume is deliberately failed.  Test disconnected/connected
+  peripheral, host and OTG cycles with bulk transfers and checksums, hubs,
+  repeated cable/role changes and both DMA/PIO builds.  Separately exercise
+  board-supported USB remote wake and CPCAP cable/ID wake, recording PRCM
+  wake sources and expected VBUSVLD masking; no wake mode is certified here.
+  A no-op PHY callback cannot establish recovery after external PHY power loss.

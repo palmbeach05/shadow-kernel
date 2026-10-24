@@ -1,0 +1,155 @@
+OMAP MUSB bounded resume recovery
+================================
+
+Change description for the USB recovery PR
+------------------------------------------
+A failed OMAP system resume previously returned with the controller quiesced
+and no automatic restoration retry. Later suspend requests returned -EBUSY.
+The regular, sleepable OMAP resume callback now makes at most three total
+restoration attempts, separated by 20 ms (at most two delays). A successful
+first attempt incurs no delay. Suspend rollback uses the same bounded path.
+
+Each attempt uses the existing clock/wrapper/PHY sequence. Core restoration
+and pm_complete remain in musb_resume(), after successful platform restore.
+Thus retries do not restore endpoint CSRs, enable controller/DMA IRQs, rearm
+saved timers or replay CPCAP events. Success follows the existing completion
+ordering, including deferred disconnect before the final reconnect event.
+There is no reset, background worker, new timer or deferred recovery lifetime.
+
+Retry safety and ownership
+--------------------------
+The OMAP set_clock callback returns enable errors without changing ownership.
+clock_off changes only after a successful enable or disable; a failed cleanup
+disable leaves ownership held so the next attempt does not enable twice.
+Wrapper writes replay saved policy, never SOFTRESET. An OMAP3630 PHYSEL
+mismatch fails before core access; retries do not attempt an interface switch.
+A failed attempt requests force standby before releasing the clock.
+
+The transceivers in this checkout have repeatable resume callbacks: CPCAP
+and NOP do nothing; TWL4030 gates power-up with its asleep flag. TWL4030
+returns zero even for some internal hardware failures, so this change cannot
+detect or recover those errors. Callback success remains the PHY readiness
+contract. A new fallible PHY callback must be audited for partial power-up
+and reference ownership before using this retry policy. No CPCAP regulator
+or accessory policy is changed, and PHY power-loss recovery is not added.
+
+The PM core's device_resume()/device_suspend() hold dev->sem around regular
+callbacks (drivers/base/power/main.c); driver detach also holds that semaphore
+(drivers/base/dd.c). All retries finish while this serialization is held.
+A competing suspend or unbind waits for the current callback; there is no
+pending work to cancel and nothing can run after controller removal. Sleepable
+PHY calls and delays run without musb->lock. CPCAP notifications continue to
+record deferred cable state under the existing mutex/spinlock scheme.
+
+After exhaustion the original restoration sequence's final error reaches the
+PM caller, and an error identifies the three-attempt limit and retained
+quiescence. No IRQ/timer completion runs. A new suspend remains rejected,
+preserving the saved context. The supported operator action at this point is
+a reboot; cable reinsertion alone does not restart restoration. Do not use
+unbind/rebind as an operator recovery action: the legacy teardown assumes an
+accessible controller, which persistent clock/PHY failure cannot guarantee.
+Removal racing an in-progress retry is serialized, but teardown after terminal
+hardware failure requires separate platform validation.
+
+Reproducible software checks
+----------------------------
+From the repository root:
+
+    python3 tools/usb/musb_resume_test.py
+
+This compiles the actual omap_musb_pm_resume_once(), omap_musb_pm_resume(),
+omap_musb_pm_suspend() and musb_resume() with host GCC and fault-injecting
+clock/PHY/MMIO stubs.
+It covers normal success, transient clock/wrapper/PHY failure, persistent
+clock/wrapper/PHY failure, suspend rollback success/exhaustion, the
+three-attempt bound, two-delay bound, no core restore
+or completion on failure, and clock cleanup failure without duplicate enable.
+It also checks success on attempt three and later resume using a reference
+retained after terminal cleanup failure. Both platform clock callback and
+direct clk_enable paths are exercised.
+It does not simulate PM semaphores, real DMA, interrupts, timers or CPCAP.
+
+Hardware fault-injection procedure (not performed)
+--------------------------------------------------
+Use a disposable test kernel on OMAP3630 MAPPHONE with CPCAP and, separately,
+OMAP3430 with TWL4030. Retain a serial console and reboot access. Build the
+CM11 configuration using the commands in musb-context.txt; also build PM-off,
+host/peripheral/OTG and DMA/PIO variants where supported.
+
+1. Baseline: suspend/resume with active USB traffic, idle USB and no cable.
+   Record transfers/checksums, interface clock use count, controller/DMA IRQ
+   counts and idle/OTG timer deadlines. Successful resume must attempt once.
+2. In a temporary test-only patch, return -EIO once from set_clock's enable
+   branch BEFORE clk_enable, without changing clk_on. Resume must recover on
+   attempt two, with one acquired clock reference and working transfers.
+3. Repeat with three consecutive injected enable errors. Confirm three calls,
+   no wrapper/core MMIO, no IRQ/timer reactivation and the terminal diagnostic.
+   Remove the injection and reboot before the next hardware case.
+4. Inject a one-shot failure before otg_set_suspend(..., 0) in the resume-once
+   helper, then a persistent failure there. This exercises failure cleanup
+   without introducing real partial regulator changes. Verify one reference
+   per active controller, balanced failed attempts, and no core restore or
+   CPCAP replay before success. Separately validate actual PHY failure modes.
+5. During a retry delay, request a new suspend and, in a separate run, unbind.
+   Trace dev->sem acquisition/release and callback entry/exit. Neither operation
+   may overlap restoration; successful recovery must precede teardown MMIO.
+   There must be no callback or retry after removal. Terminal hardware-failure
+   teardown is not certified by this test and must not be used for recovery.
+6. Disconnect/reconnect during a deliberately delayed failed resume. Confirm
+   notifications defer controller accesses, then replay disconnect before
+   the final cable state after successful core restore. Verify enumeration.
+7. Inject wrapper validation failure and clock-disable cleanup failure using
+   test-only stubs that preserve the documented ownership contract. Inspect
+   clock references, force standby, IRQ masks and timer state on every attempt.
+   Do not simulate disable failure after actually releasing its reference.
+8. After transient recovery, repeat suspend/resume and transfers. Confirm no
+   IRQ disable-depth accumulation, lost timers or clock-reference growth.
+
+Historical validation and base record (prior follow-up)
+------------------------------------------------------
+Host extracted-source fault checks passed; git diff --check passed. No kernel
+build or hardware test was performed. GNU make and an ARM cross compiler are
+not available in this environment. Host compilation does not establish kernel
+configuration compatibility or real PHY/DMA recovery.
+
+Requested PR target: 2.6.32.71. The available checkout is 1b74ee14 with only
+2.6.32.9 local/remote-tracking refs. No remote operations were permitted or
+performed. Consequently neither the latest 2.6.32.71 source nor ancestry can
+be verified here. The publishing workflow must transplant/review this focused
+USB change against the actual 2.6.32.71 base before creating the PR. No TI-ST,
+Defy or configuration files are changed by this follow-up.
+
+Current validation and base inspection (2026-10-24)
+--------------------------------------------------
+Source inspection: HEAD a2c8aa267880f67bea914dee64a6d6dab1b65769 is a shallow
+checkout. Makefile still declares 2.6.32.9; the only local branch and
+remote-tracking branch are 2.6.32.9 at 30800700. No 2.6.32.71 ref or ancestry
+evidence is available. The requested updated base remains unverified; neither
+a version-label edit nor this focused USB change establishes stable ancestry.
+No remote operations or kernel-version metadata edits were performed. Review
+and validate this change against the actual 2.6.32.71 base before publishing
+it as a change for that base.
+
+Serialization inspection: device_resume() and device_suspend() in
+drivers/base/power/main.c hold dev->sem across regular bus PM callbacks.
+The platform bus dispatches those to musb_resume()/musb_suspend().
+device_release_driver() and driver_detach() in drivers/base/dd.c hold the
+same semaphore across __device_release_driver() and the remove callback.
+musb_suspend() drops musb->lock before platform suspend/rollback;
+musb_resume() acquires it only after platform recovery succeeds.
+omap_musb_pm_complete() replays deferred CPCAP events and rearms saved timers
+before enabling IRQs; musb_cpcap_resume() applies deferred disconnect before
+the final cable event. These are source findings, not concurrency tests.
+
+Automated checks: python3 tools/usb/musb_resume_test.py passed using host GCC
+with -std=gnu89 -Wall -Wextra -Werror; git diff --check passed. The harness
+compiles extracted production resume and suspend callbacks, with stubs for
+wrapper restoration, clocks, PHY and completion. It checks that sleepable
+calls occur outside the modeled spinlock. It does not execute the kernel PM
+core, actual wrapper MMIO, IRQ/timer handling or CPCAP event replay.
+
+Kernel builds: not performed; GNU make and an ARM cross compiler are absent
+from the inspected environment. Hardware tests: not performed. The hardware
+procedure above remains required, including serialization, cable events,
+IRQ/timer state and subsequent suspend/resume cycles. No verified PHY
+power-loss recovery is claimed.

@@ -31,6 +31,7 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/io.h>
 
 #include <asm/mach-types.h>
@@ -447,12 +448,9 @@ static int omap_musb_restore_wrapper(struct musb *musb)
 	return 0;
 }
 
-static int omap_musb_pm_resume(struct musb *musb)
+static int omap_musb_pm_resume_once(struct musb *musb)
 {
 	int ret, undo;
-
-	if (!musb->omap_context.quiesced)
-		return -EINVAL;
 
 	if (musb->omap_context.clock_off) {
 		if (musb->set_clock)
@@ -492,6 +490,33 @@ cleanup:
 			musb->omap_context.clock_off = 1;
 		}
 	}
+	return ret;
+}
+
+#define OMAP_MUSB_RESUME_ATTEMPTS 3
+#define OMAP_MUSB_RESUME_DELAY_MS 20
+
+static int omap_musb_pm_resume(struct musb *musb)
+{
+	int attempt, ret;
+
+	if (!musb->omap_context.quiesced)
+		return -EINVAL;
+
+	/* Regular PM and detach hold dev->sem for the whole callback.
+	 * Keep retries sleepable and leave core restore/completion to the caller.
+	 */
+	for (attempt = 0; attempt < OMAP_MUSB_RESUME_ATTEMPTS; attempt++) {
+		if (attempt)
+			msleep(OMAP_MUSB_RESUME_DELAY_MS);
+		ret = omap_musb_pm_resume_once(musb);
+		if (!ret)
+			return 0;
+	}
+
+	dev_err(musb->controller,
+		"resume failed after %d attempts: %d; controller remains quiesced\n",
+		OMAP_MUSB_RESUME_ATTEMPTS, ret);
 	return ret;
 }
 
