@@ -1978,7 +1978,7 @@ restart:
 		sk_nulls_for_each(sk, node, &tcp_hashinfo.ehash[bucket].chain) {
 			struct inet_sock *inet = inet_sk(sk);
 
-			if (inet->rcv_saddr != saddr)
+			if (inet->inet_rcv_saddr != saddr)
 				continue;
 			if (sysctl_ip_dynaddr && sk->sk_state == TCP_SYN_SENT)
 				continue;
