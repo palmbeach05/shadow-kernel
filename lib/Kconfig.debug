@@ -1095,3 +1095,8 @@ source "lib/Kconfig.kmemcheck"
 
 config TEST_KSTRTOX
 	tristate "Test kstrto*() family of functions at runtime"
+
+config TEST_GCD
+	tristate "Test gcd() at runtime"
+	help
+	  Test greatest common divisor calculations, including zero inputs.
