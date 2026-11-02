@@ -264,7 +264,7 @@ int fib_validate_source(__be32 src, __be32 dst, u8 tos, int oif,
 	if (fib_lookup(net, &fl, &res))
 		goto last_resort;
 	if (res.type != RTN_UNICAST) {
-		if (res.type !RTN_LOCAL || !accept_local)
+		if (res.type != RTN_LOCAL || !accept_local)
 			goto e_inval_res;
 		}
 	*spec_dst = FIB_RES_PREFSRC(res);

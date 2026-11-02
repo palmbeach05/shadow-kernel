@@ -1968,7 +1968,7 @@ void tcp_v4_nuke_addr(__u32 saddr)
 {
 	unsigned int bucket;
 
-	for (bucket = 0; bucket < tcp_hashinfo.ehash_size; bucket++) {
+	for (bucket = 0; bucket < tcp_hashinfo.ehash_mask; bucket++) {
 		struct hlist_nulls_node *node;
 		struct sock *sk;
 		spinlock_t *lock = inet_ehash_lockp(&tcp_hashinfo, bucket);
