@@ -2,7 +2,7 @@ This directory attempts to document the ABI between the Linux kernel and
 userspace, and the relative stability of these interfaces.  Due to the
 everchanging nature of Linux, and the differing maturity levels, these
 interfaces should be used by userspace programs in different ways.
-
+ 
 We have four different levels of ABI stability, as shown by the four
 different subdirectories in this location.  Interfaces may change levels
 of stability according to the rules described below.
