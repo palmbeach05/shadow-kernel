@@ -30,7 +30,6 @@ static struct ctl_table net_core_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.strategy	= sysctl_intvec,
 		.extra1		= &min_sndbuf,
 	},
 	{
@@ -39,7 +38,6 @@ static struct ctl_table net_core_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.strategy	= sysctl_intvec,
 		.extra1		= &min_rcvbuf,
 	},
 	{
@@ -48,7 +46,6 @@ static struct ctl_table net_core_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.strategy	= sysctl_intvec,
 		.extra1		= &min_sndbuf,
 	},
 	{
@@ -57,7 +54,6 @@ static struct ctl_table net_core_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.strategy	= sysctl_intvec,
 		.extra1		= &min_rcvbuf,
 	},
 	{
@@ -122,7 +118,6 @@ static struct ctl_table netns_core_table[] = {
 		.extra1		= &zero,
 		.extra2		= &ushort_max,
 		.proc_handler	= proc_dointvec_minmax,
-		.strategy	= &sysctl_intvec
 	},
 	{ }
 };
