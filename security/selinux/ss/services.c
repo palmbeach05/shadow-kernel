@@ -1769,6 +1769,9 @@ int security_load_policy(void *data, size_t len)
 			return -EINVAL;
 		}
 		if (policydb_load_isids(&policydb, &sidtab)) {
+			kfree(current_mapping);
+			current_mapping = NULL;
+			current_mapping_size = 0;
 			policydb_destroy(&policydb);
 			avtab_cache_destroy();
 			return -EINVAL;
