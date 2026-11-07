@@ -53,7 +53,7 @@
 
 
 extern const char *drbd_buildtag(void);
-#define REL_VERSION "8.3.3rc2"
+#define REL_VERSION "8.3.6"
 #define API_VERSION 88
 #define PRO_VERSION_MIN 86
 #define PRO_VERSION_MAX 91
@@ -138,6 +138,7 @@ enum drbd_ret_codes {
 	ERR_VERIFY_RUNNING	= 149, /* DRBD 8.2 only */
 	ERR_DATA_NOT_CURRENT	= 150,
 	ERR_CONNECTED		= 151, /* DRBD 8.3 only */
+	ERR_PERM		= 152,
 
 	/* insert new ones above this line */
 	AFTER_LAST_ERR_CODE
@@ -321,13 +322,6 @@ enum drbd_timeout_flag {
 #define DRBD_NL_CREATE_DEVICE 0x01
 #define DRBD_NL_SET_DEFAULTS  0x02
 
-/* The following line should be moved over to linux/connector.h
- * when the time comes */
-#ifndef CN_IDX_DRBD
-# define CN_IDX_DRBD			0x4
-/* Ubuntu "intrepid ibex" release defined CN_IDX_DRBD as 0x6 */
-#endif
-#define CN_VAL_DRBD			0x1
 
 /* For searching a vacant cn_idx value */
 #define CN_IDX_STEP			6977

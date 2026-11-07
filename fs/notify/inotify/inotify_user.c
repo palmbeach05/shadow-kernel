@@ -69,36 +69,30 @@ static int zero;
 
 ctl_table inotify_table[] = {
 	{
-		.ctl_name	= INOTIFY_MAX_USER_INSTANCES,
 		.procname	= "max_user_instances",
 		.data		= &inotify_max_user_instances,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= &proc_dointvec_minmax,
-		.strategy	= &sysctl_intvec,
+		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero,
 	},
 	{
-		.ctl_name	= INOTIFY_MAX_USER_WATCHES,
 		.procname	= "max_user_watches",
 		.data		= &inotify_max_user_watches,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= &proc_dointvec_minmax,
-		.strategy	= &sysctl_intvec,
+		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero,
 	},
 	{
-		.ctl_name	= INOTIFY_MAX_QUEUED_EVENTS,
 		.procname	= "max_queued_events",
 		.data		= &inotify_max_queued_events,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= &proc_dointvec_minmax,
-		.strategy	= &sysctl_intvec,
+		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero
 	},
-	{ .ctl_name = 0 }
+	{ }
 };
 #endif /* CONFIG_SYSCTL */
 
@@ -641,7 +635,7 @@ static struct fsnotify_group *inotify_new_group(struct user_struct *user, unsign
 
 	spin_lock_init(&group->inotify_data.idr_lock);
 	idr_init(&group->inotify_data.idr);
-	group->inotify_data.last_wd = 0;
+	group->inotify_data.last_wd = 1;
 	group->inotify_data.user = user;
 	group->inotify_data.fa = NULL;
 

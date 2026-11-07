@@ -125,7 +125,7 @@ static int can_create(struct net *net, struct socket *sock, int protocol)
 	if (protocol < 0 || protocol >= CAN_NPROTO)
 		return -EINVAL;
 
-	if (net != &init_net)
+	if (!net_eq(net, &init_net))
 		return -EAFNOSUPPORT;
 
 #ifdef CONFIG_MODULES
@@ -157,11 +157,6 @@ static int can_create(struct net *net, struct socket *sock, int protocol)
 
 	if (cp->type != sock->type) {
 		err = -EPROTONOSUPPORT;
-		goto errout;
-	}
-
-	if (cp->capability >= 0 && !capable(cp->capability)) {
-		err = -EPERM;
 		goto errout;
 	}
 

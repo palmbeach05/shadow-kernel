@@ -34,6 +34,7 @@
 #include <linux/bitops.h>
 #include <linux/slab.h>
 #include <linux/crypto.h>
+#include <linux/ratelimit.h>
 #include <linux/tcp.h>
 #include <linux/mutex.h>
 #include <linux/major.h>
@@ -134,8 +135,6 @@ enum {
 
 	DRBD_FAULT_MAX,
 };
-
-extern void trace_drbd_resync(struct drbd_conf *mdev, int level, const char *fmt, ...);
 
 #ifdef CONFIG_DRBD_FAULT_INJECTION
 extern unsigned int
@@ -712,11 +711,6 @@ enum epoch_event {
 	EV_GOT_BARRIER_NR,
 	EV_BARRIER_DONE,
 	EV_BECAME_LAST,
-	EV_TRACE_FLUSH,       /* TRACE_ are not real events, only used for tracing */
-	EV_TRACE_ADD_BARRIER, /* Doing the first write as a barrier write */
-	EV_TRACE_SETTING_BI,  /* Barrier is expressed with the first write of the next epoch */
-	EV_TRACE_ALLOC,
-	EV_TRACE_FREE,
 	EV_CLEANUP = 32, /* used as flag */
 };
 

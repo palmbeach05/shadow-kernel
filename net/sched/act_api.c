@@ -968,7 +968,7 @@ static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 	u32 pid = skb ? NETLINK_CB(skb).pid : 0;
 	int ret = 0, ovr = 0;
 
-	if (net != &init_net)
+	if (!net_eq(net, &init_net))
 		return -EINVAL;
 
 	ret = nlmsg_parse(n, sizeof(struct tcamsg), tca, TCA_ACT_MAX, NULL);
@@ -1051,7 +1051,7 @@ tc_dump_action(struct sk_buff *skb, struct netlink_callback *cb)
 	struct tcamsg *t = (struct tcamsg *) NLMSG_DATA(cb->nlh);
 	struct nlattr *kind = find_dump_kind(cb->nlh);
 
-	if (net != &init_net)
+	if (!net_eq(net, &init_net))
 		return 0;
 
 	if (kind == NULL) {

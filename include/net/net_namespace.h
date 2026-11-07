@@ -38,7 +38,8 @@ struct net {
 						 */
 #endif
 	struct list_head	list;		/* list of network namespaces */
-	struct work_struct	work;		/* work struct for freeing */
+	struct list_head	cleanup_list;	/* namespaces on death row */
+	struct list_head	exit_list;	/* Use only net_mutex */
 
 	struct proc_dir_entry 	*proc_net;
 	struct proc_dir_entry 	*proc_net_stat;
@@ -232,6 +233,9 @@ struct pernet_operations {
 	struct list_head list;
 	int (*init)(struct net *net);
 	void (*exit)(struct net *net);
+	void (*exit_batch)(struct list_head *net_exit_list);
+	int *id;
+	size_t size;
 };
 
 /*
@@ -255,12 +259,30 @@ struct pernet_operations {
  */
 extern int register_pernet_subsys(struct pernet_operations *);
 extern void unregister_pernet_subsys(struct pernet_operations *);
-extern int register_pernet_gen_subsys(int *id, struct pernet_operations *);
-extern void unregister_pernet_gen_subsys(int id, struct pernet_operations *);
 extern int register_pernet_device(struct pernet_operations *);
 extern void unregister_pernet_device(struct pernet_operations *);
-extern int register_pernet_gen_device(int *id, struct pernet_operations *);
-extern void unregister_pernet_gen_device(int id, struct pernet_operations *);
+
+static inline int register_pernet_gen_subsys(int *id, struct pernet_operations *ops)
+{
+	ops->id = id;
+	return register_pernet_subsys(ops);
+}
+
+static inline void unregister_pernet_gen_subsys(int id, struct pernet_operations *ops)
+{
+	return unregister_pernet_subsys(ops);
+}
+
+static inline int register_pernet_gen_device(int *id, struct pernet_operations *ops)
+{
+	ops->id = id;
+	return register_pernet_device(ops);
+}
+
+static inline void unregister_pernet_gen_device(int id, struct pernet_operations *ops)
+{
+	return unregister_pernet_device(ops);
+}
 
 struct ctl_path;
 struct ctl_table;

@@ -457,25 +457,6 @@ static void macvlan_port_destroy(struct net_device *dev)
 	kfree(port);
 }
 
-static void macvlan_transfer_operstate(struct net_device *dev)
-{
-	struct macvlan_dev *vlan = netdev_priv(dev);
-	const struct net_device *lowerdev = vlan->lowerdev;
-
-	if (lowerdev->operstate == IF_OPER_DORMANT)
-		netif_dormant_on(dev);
-	else
-		netif_dormant_off(dev);
-
-	if (netif_carrier_ok(lowerdev)) {
-		if (!netif_carrier_ok(dev))
-			netif_carrier_on(dev);
-	} else {
-		if (netif_carrier_ok(dev))
-			netif_carrier_off(dev);
-	}
-}
-
 static int macvlan_validate(struct nlattr *tb[], struct nlattr *data[])
 {
 	if (tb[IFLA_ADDRESS]) {
@@ -506,7 +487,7 @@ static int macvlan_get_tx_queues(struct net *net,
 	return 0;
 }
 
-static int macvlan_newlink(struct net_device *dev,
+static int macvlan_newlink(struct net *src_net, struct net_device *dev,
 			   struct nlattr *tb[], struct nlattr *data[])
 {
 	struct macvlan_dev *vlan = netdev_priv(dev);
@@ -517,7 +498,7 @@ static int macvlan_newlink(struct net_device *dev,
 	if (!tb[IFLA_LINK])
 		return -EINVAL;
 
-	lowerdev = __dev_get_by_index(dev_net(dev), nla_get_u32(tb[IFLA_LINK]));
+	lowerdev = __dev_get_by_index(src_net, nla_get_u32(tb[IFLA_LINK]));
 	if (lowerdev == NULL)
 		return -ENODEV;
 
@@ -553,17 +534,17 @@ static int macvlan_newlink(struct net_device *dev,
 		return err;
 
 	list_add_tail(&vlan->list, &port->vlans);
-	macvlan_transfer_operstate(dev);
+	netif_stacked_transfer_operstate(lowerdev, dev);
 	return 0;
 }
 
-static void macvlan_dellink(struct net_device *dev)
+static void macvlan_dellink(struct net_device *dev, struct list_head *head)
 {
 	struct macvlan_dev *vlan = netdev_priv(dev);
 	struct macvlan_port *port = vlan->port;
 
 	list_del(&vlan->list);
-	unregister_netdevice(dev);
+	unregister_netdevice_queue(dev, head);
 
 	if (list_empty(&port->vlans))
 		macvlan_port_destroy(port->dev);
@@ -593,7 +574,8 @@ static int macvlan_device_event(struct notifier_block *unused,
 	switch (event) {
 	case NETDEV_CHANGE:
 		list_for_each_entry(vlan, &port->vlans, list)
-			macvlan_transfer_operstate(vlan->dev);
+			netif_stacked_transfer_operstate(vlan->lowerdev,
+							 vlan->dev);
 		break;
 	case NETDEV_FEAT_CHANGE:
 		list_for_each_entry(vlan, &port->vlans, list) {
@@ -604,7 +586,7 @@ static int macvlan_device_event(struct notifier_block *unused,
 		break;
 	case NETDEV_UNREGISTER:
 		list_for_each_entry_safe(vlan, next, &port->vlans, list)
-			macvlan_dellink(vlan->dev);
+			macvlan_dellink(vlan->dev, NULL);
 		break;
 	}
 	return NOTIFY_DONE;

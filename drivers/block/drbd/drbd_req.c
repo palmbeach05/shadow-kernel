@@ -23,13 +23,11 @@
 
  */
 
-#include <linux/autoconf.h>
 #include <linux/module.h>
 
 #include <linux/slab.h>
 #include <linux/drbd.h>
 #include "drbd_int.h"
-#include "drbd_tracing.h"
 #include "drbd_req.h"
 
 
@@ -41,8 +39,8 @@ static void _drbd_start_io_acct(struct drbd_conf *mdev, struct drbd_request *req
 	cpu = part_stat_lock();
 	part_stat_inc(cpu, &mdev->vdisk->part0, ios[rw]);
 	part_stat_add(cpu, &mdev->vdisk->part0, sectors[rw], bio_sectors(bio));
+	part_inc_in_flight(&mdev->vdisk->part0, rw);
 	part_stat_unlock();
-	mdev->vdisk->part0.in_flight[rw]++;
 }
 
 /* Update disk stats when completing request upwards */
@@ -54,8 +52,8 @@ static void _drbd_end_io_acct(struct drbd_conf *mdev, struct drbd_request *req)
 	cpu = part_stat_lock();
 	part_stat_add(cpu, &mdev->vdisk->part0, ticks[rw], duration);
 	part_round_stats(cpu, &mdev->vdisk->part0);
+	part_dec_in_flight(&mdev->vdisk->part0, rw);
 	part_stat_unlock();
-	mdev->vdisk->part0.in_flight[rw]--;
 }
 
 static void _req_is_done(struct drbd_conf *mdev, struct drbd_request *req, const int rw)
@@ -219,7 +217,6 @@ static void _about_to_complete_local_write(struct drbd_conf *mdev,
 void complete_master_bio(struct drbd_conf *mdev,
 		struct bio_and_error *m)
 {
-	trace_drbd_bio(mdev, "Rq", m->bio, 1, NULL);
 	bio_endio(m->bio, m->error);
 	dec_ap_bio(mdev);
 }
@@ -236,8 +233,6 @@ void _req_may_be_done(struct drbd_request *req, struct bio_and_error *m)
 	struct drbd_conf *mdev = req->mdev;
 	/* only WRITES may end up here without a master bio (on barrier ack) */
 	int rw = req->master_bio ? bio_data_dir(req->master_bio) : WRITE;
-
-	trace_drbd_req(req, nothing, "_req_may_be_done");
 
 	/* we must not complete the master bio, while it is
 	 *	still being processed by _drbd_send_zc_bio (drbd_send_dblock)
@@ -416,8 +411,6 @@ void __req_mod(struct drbd_request *req, enum drbd_req_event what,
 	struct drbd_conf *mdev = req->mdev;
 	m->bio = NULL;
 
-	trace_drbd_req(req, what, NULL);
-
 	switch (what) {
 	default:
 		dev_err(DEV, "LOGIC BUG in %s:%u\n", __FILE__ , __LINE__);
@@ -512,7 +505,7 @@ void __req_mod(struct drbd_request *req, enum drbd_req_event what,
 		 * corresponding hlist_del is in _req_may_be_done() */
 		hlist_add_head(&req->colision, ar_hash_slot(mdev, req->sector));
 
-		set_bit(UNPLUG_REMOTE, &mdev->flags); /* why? */
+		set_bit(UNPLUG_REMOTE, &mdev->flags);
 
 		D_ASSERT(req->rq_state & RQ_NET_PENDING);
 		req->rq_state |= RQ_NET_QUEUED;
@@ -542,6 +535,11 @@ void __req_mod(struct drbd_request *req, enum drbd_req_event what,
 		 * again ourselves to close the current epoch.
 		 *
 		 * Add req to the (now) current epoch (barrier). */
+
+		/* otherwise we may lose an unplug, which may cause some remote
+		 * io-scheduler timeout to expire, increasing maximum latency,
+		 * hurting performance. */
+		set_bit(UNPLUG_REMOTE, &mdev->flags);
 
 		/* see drbd_make_request_common,
 		 * just after it grabs the req_lock */
@@ -667,7 +665,6 @@ void __req_mod(struct drbd_request *req, enum drbd_req_event what,
 			 * this is bad, because if the connection is lost now,
 			 * we won't be able to clean them up... */
 			dev_err(DEV, "FIXME (barrier_acked but pending)\n");
-			trace_drbd_req(req, nothing, "FIXME (barrier_acked but pending)");
 			list_move(&req->tl_requests, &mdev->out_of_sequence_requests);
 		}
 		D_ASSERT(req->rq_state & RQ_NET_SENT);
@@ -736,8 +733,6 @@ static int drbd_make_request_common(struct drbd_conf *mdev, struct bio *bio)
 		bio_endio(bio, -ENOMEM);
 		return 0;
 	}
-
-	trace_drbd_bio(mdev, "Rq", bio, 0, req);
 
 	local = get_ldev(mdev);
 	if (!local) {
@@ -928,8 +923,6 @@ allocate_barrier:
 
 	if (local) {
 		req->private_bio->bi_bdev = mdev->ldev->backing_bdev;
-
-		trace_drbd_bio(mdev, "Pri", req->private_bio, 0, NULL);
 
 		if (FAULT_ACTIVE(mdev, rw == WRITE ? DRBD_FAULT_DT_WR
 				     : rw == READ  ? DRBD_FAULT_DT_RD

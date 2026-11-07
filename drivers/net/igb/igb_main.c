@@ -2342,15 +2342,29 @@ static void igb_free_all_tx_resources(struct igb_adapter *adapter)
 static void igb_unmap_and_free_tx_resource(struct igb_adapter *adapter,
 					   struct igb_buffer *buffer_info)
 {
-	buffer_info->dma = 0;
+	if (buffer_info->dma) {
+		if (buffer_info->mapped_as_page)
+			pci_unmap_page(adapter->pdev,
+				       buffer_info->dma,
+				       buffer_info->length,
+				       PCI_DMA_TODEVICE);
+		else
+			pci_unmap_single(adapter->pdev,
+					 buffer_info->dma,
+					 buffer_info->length,
+					 PCI_DMA_TODEVICE);
+		buffer_info->dma = 0;
+	}
+
 	if (buffer_info->skb) {
-		skb_dma_unmap(&adapter->pdev->dev, buffer_info->skb,
-		              DMA_TO_DEVICE);
 		dev_kfree_skb_any(buffer_info->skb);
 		buffer_info->skb = NULL;
 	}
+
 	buffer_info->time_stamp = 0;
-	/* buffer_info must be completely set up in the transmit path */
+	buffer_info->length = 0;
+	buffer_info->next_to_watch = 0;
+	buffer_info->mapped_as_page = false;
 }
 
 /**
@@ -3174,28 +3188,28 @@ static inline int igb_tx_map_adv(struct igb_adapter *adapter,
 				 struct igb_ring *tx_ring, struct sk_buff *skb,
 				 unsigned int first)
 {
+	struct pci_dev *pdev = adapter->pdev;
 	struct igb_buffer *buffer_info;
 	unsigned int len = skb_headlen(skb);
 	unsigned int count = 0, i;
 	unsigned int f;
-	dma_addr_t *map;
 
 	i = tx_ring->next_to_use;
-
-	if (skb_dma_map(&adapter->pdev->dev, skb, DMA_TO_DEVICE)) {
-		dev_err(&adapter->pdev->dev, "TX DMA map failed\n");
-		return 0;
-	}
-
-	map = skb_shinfo(skb)->dma_maps;
 
 	buffer_info = &tx_ring->buffer_info[i];
 	BUG_ON(len >= IGB_MAX_DATA_PER_TXD);
 	buffer_info->length = len;
-	/* set time_stamp *before* dma to help avoid a possible race */
+	/* Set time_stamp before dma to help avoid a possible race. */
 	buffer_info->time_stamp = jiffies;
 	buffer_info->next_to_watch = i;
-	buffer_info->dma = skb_shinfo(skb)->dma_head;
+	buffer_info->mapped_as_page = false;
+	buffer_info->dma = pci_map_single(pdev, skb->data, len,
+					  PCI_DMA_TODEVICE);
+	if (pci_dma_mapping_error(pdev, buffer_info->dma))
+		goto dma_error;
+
+	/* Count every successful mapping, including the linear buffer. */
+	count++;
 
 	for (f = 0; f < skb_shinfo(skb)->nr_frags; f++) {
 		struct skb_frag_struct *frag;
@@ -3212,14 +3226,52 @@ static inline int igb_tx_map_adv(struct igb_adapter *adapter,
 		buffer_info->length = len;
 		buffer_info->time_stamp = jiffies;
 		buffer_info->next_to_watch = i;
-		buffer_info->dma = map[count];
+		buffer_info->mapped_as_page = true;
+		buffer_info->dma = pci_map_page(pdev,
+						frag->page,
+						frag->page_offset,
+						len,
+						PCI_DMA_TODEVICE);
+		if (pci_dma_mapping_error(pdev, buffer_info->dma))
+			goto dma_error;
+
 		count++;
 	}
 
+	/*
+	 * Assign skb ownership only after every mapping succeeds.
+	 * The caller frees skb if this function returns zero.
+	 */
 	tx_ring->buffer_info[i].skb = skb;
 	tx_ring->buffer_info[first].next_to_watch = i;
 
-	return count + 1;
+	return count;
+
+dma_error:
+	dev_err(&pdev->dev, "TX DMA map failed\n");
+
+	/* The failed mapping must not be passed to a DMA unmap call. */
+	buffer_info->dma = 0;
+	buffer_info->time_stamp = 0;
+	buffer_info->length = 0;
+	buffer_info->next_to_watch = 0;
+	buffer_info->mapped_as_page = false;
+
+	/*
+	 * i identifies the failed entry.
+	 * count includes only the preceding successful mappings.
+	 */
+	while (count) {
+		count--;
+		if (i == 0)
+			i = tx_ring->count;
+		i--;
+
+		buffer_info = &tx_ring->buffer_info[i];
+		igb_unmap_and_free_tx_resource(adapter, buffer_info);
+	}
+
+	return 0;
 }
 
 static inline void igb_tx_queue_adv(struct igb_adapter *adapter,

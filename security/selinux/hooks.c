@@ -88,7 +88,6 @@
 
 #define NUM_SEL_MNT_OPTS 5
 
-extern unsigned int policydb_loaded_version;
 extern int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm);
 extern struct security_operations *security_ops;
 
@@ -4801,10 +4800,7 @@ static int selinux_netlink_send(struct sock *sk, struct sk_buff *skb)
 	if (err)
 		return err;
 
-	if (policydb_loaded_version >= POLICYDB_VERSION_NLCLASS)
-		err = selinux_nlmsg_perm(sk, skb);
-
-	return err;
+	return selinux_nlmsg_perm(sk, skb);
 }
 
 static int selinux_netlink_recv(struct sk_buff *skb, int capability)
@@ -5922,11 +5918,11 @@ int selinux_disable(void)
 	selinux_disabled = 1;
 	selinux_enabled = 0;
 
-	/* Try to destroy the avc node cache */
-	avc_disable();
-
 	/* Reset security_ops to the secondary module, dummy or capability. */
 	security_ops = secondary_ops;
+
+	/* Try to destroy the avc node cache */
+	avc_disable();
 
 	/* Unregister netfilter hooks. */
 	selinux_nf_ip_exit();
