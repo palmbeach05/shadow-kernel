@@ -4,7 +4,7 @@
  *  Copyright (C) 2008 Thomas Gleixner <tglx@linutronix.de>
  *  Copyright (C) 2008-2009 Red Hat, Inc., Ingo Molnar
  *  Copyright (C) 2008-2009 Red Hat, Inc., Peter Zijlstra <pzijlstr@redhat.com>
- *  Copyright  ©  2009 Paul Mackerras, IBM Corp. <paulus@au1.ibm.com>
+ *  Copyright  ï¿½  2009 Paul Mackerras, IBM Corp. <paulus@au1.ibm.com>
  *
  * For licensing details see kernel-base/COPYING
  */
@@ -3707,7 +3707,10 @@ static int __perf_event_overflow(struct perf_event *event, int nmi,
 		perf_pending_queue(&event->pending, perf_pending_event);
 	}
 
-	perf_event_output(event, nmi, data, regs);
+	if (event->overflow_handler)
+		event->overflow_handler(event, nmi, data, regs);
+	else
+		perf_event_output(event, nmi, data, regs);
 	return ret;
 }
 
@@ -4356,6 +4359,8 @@ perf_event_alloc(struct perf_event_attr *attr,
 	event->oncpu		= -1;
 
 	event->parent		= parent_event;
+	if (parent_event)
+		event->overflow_handler = parent_event->overflow_handler;
 
 	event->ns		= get_pid_ns(current->nsproxy->pid_ns);
 	event->id		= atomic64_inc_return(&perf_event_id);

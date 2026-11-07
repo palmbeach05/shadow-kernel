@@ -546,6 +546,11 @@ struct perf_pending_entry {
 	void (*func)(struct perf_pending_entry *);
 };
 
+struct perf_sample_data;
+
+typedef void (*perf_overflow_handler_t)(struct perf_event *, int,
+				       struct perf_sample_data *, struct pt_regs *);
+
 /**
  * struct perf_event - performance event kernel representation:
  */
@@ -631,6 +636,7 @@ struct perf_event {
 
 	atomic_t			event_limit;
 
+	perf_overflow_handler_t		overflow_handler;
 	void (*destroy)(struct perf_event *);
 	struct rcu_head			rcu_head;
 
