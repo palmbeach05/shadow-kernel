@@ -468,16 +468,13 @@ static void ptrace_triggered(struct hw_breakpoint *bp, struct pt_regs *regs)
 	 * Store in the virtual DR6 register the fact that the breakpoint
 	 * was hit so the thread's debugger will see it.
 	 */
-	for (i = 0; i < hbp_kernel_pos; i++)
-		/*
-		 * We will check bp->info.address against the address stored in
-		 * thread's hbp structure and not debugreg[i]. This is to ensure
-		 * that the corresponding bit for 'i' in DR7 register is enabled
-		 */
-		if (bp->info.address == thread->hbp[i]->info.address)
+	for (i = 0; i < hbp_kernel_pos; i++) {
+		/* Slots can be empty, and distinct breakpoints can share an address. */
+		if (thread->hbp[i] == bp) {
+			thread->debugreg6 |= (DR_TRAP0 << i);
 			break;
-
-	thread->debugreg6 |= (DR_TRAP0 << i);
+		}
+	}
 }
 
 /*
