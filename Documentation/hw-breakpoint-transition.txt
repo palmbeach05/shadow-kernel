@@ -1,0 +1,35 @@
+Hardware breakpoint transition integration status
+================================================
+
+Inspected base: 7499af0fca0198b204767dc99242219240851fbc
+Candidate rewrite: 24f1e32c60c45c89a997c73395b69c8af6f0a84e
+Candidate parent: 2da3e160cb3d226d87b907fab26850d838ed8d7c
+
+The rewrite is not integrated. Do not apply both an eventual adapted rewrite
+and the original commit.
+
+The base uses the older struct hw_breakpoint API. The candidate also assumes
+intermediate x86 ptrace and process lifecycle changes absent from this tree.
+Its perf integration requires perf_callback_t, callback and event_callback
+members, perf_event_create_kernel_counter(), and
+perf_event_release_kernel(). Those interfaces are absent from this base.
+A complete adaptation must supply or identify these dependencies while
+preserving downstream perf ABI fields and tracing behavior.
+
+The candidate changes 22 files, including the removed ksym tracer. Keep
+kernel/trace/trace_ksym.c and its related tracer code removed. Review the
+remaining tracing hunks separately; the ksym entry and selftest conversion
+are not applicable to this base. Keep the existing HAVE_HW_BREAKPOINT
+definition and do not select it on ARM without a verified backend.
+
+Validation attempted
+--------------------
+make ARCH=x86_64 defconfig could not start: make is not installed.
+No x86 or ARM kernel configuration/build, tracing enabled/disabled build,
+perf build, target breakpoint test, or tracepoint filtering test completed.
+No partially applied source changes were retained.
+
+This inspection does not establish that the rewrite supplies the later perf
+breakpoint prerequisites. A follow-up integration must resolve the missing
+APIs, test event release and fork/exec/exit handling, and validate ptrace,
+KVM, suspend/resume, and legacy core dump users of debug register state.
