@@ -44,7 +44,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
-DEFINE_TRACE(syscall_entry);
+DEFINE_TRACE(syscall_enter);
 DEFINE_TRACE(syscall_exit);
 
 /* This mask defines the bits of the SR which the user is not allowed to

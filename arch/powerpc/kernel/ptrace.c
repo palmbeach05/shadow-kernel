@@ -39,7 +39,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 
-DEFINE_TRACE(syscall_entry);
+DEFINE_TRACE(syscall_enter);
 DEFINE_TRACE(syscall_exit);
 
 /*
@@ -1045,7 +1045,7 @@ long do_syscall_trace_enter(struct pt_regs *regs)
 {
 	long ret = 0;
 
-	trace_syscall_entry(regs, regs->gpr[0]);
+	trace_syscall_enter(regs, regs->gpr[0]);
 
 	secure_computing(regs->gpr[0]);
 

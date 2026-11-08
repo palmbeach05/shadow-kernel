@@ -40,7 +40,7 @@
 #include <asm/bootinfo.h>
 #include <asm/reg.h>
 
-DEFINE_TRACE(syscall_entry);
+DEFINE_TRACE(syscall_enter);
 DEFINE_TRACE(syscall_exit);
 
 /*
@@ -569,7 +569,7 @@ static inline int audit_arch(void)
 asmlinkage void do_syscall_trace(struct pt_regs *regs, int entryexit)
 {
 	if (!entryexit)
-		trace_syscall_entry(regs, regs->regs[2]);
+		trace_syscall_enter(regs, regs->regs[2]);
 	else
 		trace_syscall_exit(regs->regs[2]);
 

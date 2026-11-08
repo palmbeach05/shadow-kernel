@@ -41,7 +41,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
-DEFINE_TRACE(syscall_entry);
+DEFINE_TRACE(syscall_enter);
 DEFINE_TRACE(syscall_exit);
 
 extern unsigned long sys_call_table[];
@@ -460,7 +460,7 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 {
 	long ret = 0;
 
-	trace_syscall_entry(regs, regs->regs[3]);
+	trace_syscall_enter(regs, regs->regs[3]);
 
 	secure_computing(regs->regs[0]);
 

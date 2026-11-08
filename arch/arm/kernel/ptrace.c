@@ -56,7 +56,7 @@
 #define BREAKINST_THUMB	0xde01
 #endif
 
-DEFINE_TRACE(syscall_entry);
+DEFINE_TRACE(syscall_enter);
 DEFINE_TRACE(syscall_exit);
 
 extern unsigned long sys_call_table[];
@@ -863,7 +863,7 @@ asmlinkage int syscall_trace(int why, struct pt_regs *regs, int scno)
 	unsigned long ip;
 
 	if (!why)
-		trace_syscall_entry(regs, scno);
+		trace_syscall_enter(regs, scno);
 	else
 		trace_syscall_exit(regs->ARM_r0);
 

@@ -66,7 +66,7 @@ enum x86_regset {
 				  X86_EFLAGS_DF | X86_EFLAGS_OF |	\
 				  X86_EFLAGS_RF | X86_EFLAGS_AC))
 
-DEFINE_TRACE(syscall_entry);
+DEFINE_TRACE(syscall_enter);
 DEFINE_TRACE(syscall_exit);
 
 /*
@@ -1538,7 +1538,7 @@ asmregparm long syscall_trace_enter(struct pt_regs *regs)
 	if (test_thread_flag(TIF_SINGLESTEP))
 		regs->flags |= X86_EFLAGS_TF;
 
-	trace_syscall_entry(regs, regs->orig_ax);
+	trace_syscall_enter(regs, regs->orig_ax);
 
 	/* do the secure computing check first */
 	secure_computing(regs->orig_ax);
