@@ -344,10 +344,6 @@ struct module
 	struct __imv *immediate;
 	unsigned int num_immediate;
 #endif
-#ifdef CONFIG_MARKERS
-	struct marker *markers;
-	unsigned int num_markers;
-#endif
 #ifdef CONFIG_TRACEPOINTS
 	struct tracepoint *tracepoints;
 	unsigned int num_tracepoints;
@@ -550,9 +546,6 @@ int unregister_module_notifier(struct notifier_block * nb);
 extern void print_modules(void);
 extern void list_modules(void *call_data);
 
-extern void module_update_markers(void);
-extern int module_get_iter_markers(struct marker_iter *iter);
-
 extern void module_update_tracepoints(void);
 extern int module_get_iter_tracepoints(struct tracepoint_iter *iter);
 
@@ -671,20 +664,11 @@ static inline void list_modules(void *call_data)
 {
 }
 
-static inline void module_update_markers(void)
-{
-}
-
 static inline void module_update_tracepoints(void)
 {
 }
 
 static inline int module_get_iter_tracepoints(struct tracepoint_iter *iter)
-{
-	return 0;
-}
-
-static inline int module_get_iter_markers(struct marker_iter *iter)
 {
 	return 0;
 }

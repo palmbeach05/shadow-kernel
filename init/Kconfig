@@ -1187,8 +1187,6 @@ config SLOW_WORK_DEBUG
 
 	  See Documentation/slow-work.txt.
 
-source "ltt/Kconfig"
-
 config HAVE_IMMEDIATE
 	def_bool n
 

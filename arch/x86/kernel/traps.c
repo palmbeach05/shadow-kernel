@@ -685,19 +685,7 @@ static int kernel_math_error(struct pt_regs *regs, const char *str, int trapnr)
 #endif
 
 #ifdef CONFIG_X86_32
-void ltt_dump_sys_call_table(void *call_data)
-{
-	int i;
-	char namebuf[KSYM_NAME_LEN];
 
-	for (i = 0; i < NR_syscalls; i++) {
-		sprint_symbol(namebuf, sys_call_table[i]);
-		__trace_mark(0, syscall_state, sys_call_table, call_data,
-			"id %d address %p symbol %s",
-			i, (void*)sys_call_table[i], namebuf);
-	}
-}
-EXPORT_SYMBOL_GPL(ltt_dump_sys_call_table);
 #endif
 
 /*
@@ -897,21 +885,6 @@ void __math_state_restore(void)
 	thread->status |= TS_USEDFPU;	/* So we fnsave on switch_to() */
 	tsk->fpu_counter++;
 }
-
-void ltt_dump_idt_table(void *call_data)
-{
-	int i;
-	char namebuf[KSYM_NAME_LEN];
-
-	for (i = 0; i < IDT_ENTRIES; i++) {
-		unsigned long address = gate_offset(idt_table[i]);
-		sprint_symbol(namebuf, address);
-		__trace_mark(0, irq_state, idt_table, call_data,
-			"irq %d address %p symbol %s",
-			i, (void *)address, namebuf);
-	}
-}
-EXPORT_SYMBOL_GPL(ltt_dump_idt_table);
 
 /*
  * 'math_state_restore()' saves the current math information in the
