@@ -16,7 +16,6 @@
 #include <linux/kobject.h>
 #include <linux/moduleparam.h>
 #include <linux/immediate.h>
-#include <linux/marker.h>
 #include <linux/tracepoint.h>
 
 #include <linux/percpu.h>
