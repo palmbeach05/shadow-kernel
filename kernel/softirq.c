@@ -23,7 +23,6 @@
 #include <linux/rcupdate.h>
 #include <linux/ftrace.h>
 #include <linux/smp.h>
-#include <linux/marker.h>
 #include <linux/kallsyms.h>
 #include <linux/tick.h>
 #include <trace/irq.h>
@@ -56,20 +55,6 @@ EXPORT_SYMBOL(irq_stat);
 #endif
 
 static struct softirq_action softirq_vec[NR_SOFTIRQS] __cacheline_aligned_in_smp;
-
-void ltt_dump_softirq_vec(void *call_data)
-{
-	int i;
-	char namebuf[KSYM_NAME_LEN];
-
-	for (i = 0; i < 32; i++) {
-		sprint_symbol(namebuf, (unsigned long)softirq_vec[i].action);
-		__trace_mark(0, softirq_state, softirq_vec, call_data,
-			"id %d address %p symbol %s",
-			i, softirq_vec[i].action, namebuf);
-	}
-}
-EXPORT_SYMBOL_GPL(ltt_dump_softirq_vec);
 
 static DEFINE_PER_CPU(struct task_struct *, ksoftirqd);
 

@@ -328,6 +328,22 @@ static int cap_path_truncate(struct path *path, loff_t length,
 {
 	return 0;
 }
+
+static int cap_path_chmod(struct dentry *dentry, struct vfsmount *mnt,
+			  mode_t mode)
+{
+	return 0;
+}
+
+static int cap_path_chown(struct path *path, uid_t uid, gid_t gid)
+{
+	return 0;
+}
+
+static int cap_path_chroot(struct path *root)
+{
+	return 0;
+}
 #endif
 
 static int cap_file_permission(struct file *file, int mask)
@@ -1001,6 +1017,9 @@ void security_fixup_ops(struct security_operations *ops)
 	set_to_cap_if_null(ops, path_link);
 	set_to_cap_if_null(ops, path_rename);
 	set_to_cap_if_null(ops, path_truncate);
+	set_to_cap_if_null(ops, path_chmod);
+	set_to_cap_if_null(ops, path_chown);
+	set_to_cap_if_null(ops, path_chroot);
 #endif
 	set_to_cap_if_null(ops, file_permission);
 	set_to_cap_if_null(ops, file_alloc_security);

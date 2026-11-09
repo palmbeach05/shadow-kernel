@@ -37,7 +37,6 @@
 #include <linux/tracehook.h>
 #include <linux/seccomp.h>
 #include <linux/compat.h>
-#include <trace/syscall.h>
 #include <asm/segment.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -59,9 +58,6 @@ enum s390_regset {
 	REGSET_FP,
 	REGSET_GENERAL_EXTENDED,
 };
-
-DEFINE_TRACE(syscall_entry);
-DEFINE_TRACE(syscall_exit);
 
 static void
 FixPerRegisters(struct task_struct *task)
@@ -640,7 +636,7 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 	/* Do the secure computing check first. */
 	secure_computing(regs->gprs[2]);
 
-	trace_syscall_entry(regs, regs->gprs[2]);
+	trace_syscall_enter(regs, regs->gprs[2]);
 	/*
 	 * The sysc_tracesys code in entry.S stored the system
 	 * call number to gprs[2].

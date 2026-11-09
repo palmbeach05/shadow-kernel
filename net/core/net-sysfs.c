@@ -482,7 +482,7 @@ void netdev_unregister_kobject(struct net_device * net)
 
 	kobject_get(&dev->kobj);
 
-	if (dev_net(net) != &init_net)
+	if (!net_eq(dev_net(net), &init_net))
 		return;
 
 	device_del(dev);
@@ -501,15 +501,18 @@ int netdev_register_kobject(struct net_device *net)
 	dev_set_name(dev, "%s", net->name);
 
 #ifdef CONFIG_SYSFS
-	*groups++ = &netstat_group;
+	/* Allow for a device specific group */
+	if (*groups)
+		groups++;
 
+	*groups++ = &netstat_group;
 #ifdef CONFIG_WIRELESS_EXT_SYSFS
 	if (net->wireless_handlers || net->ieee80211_ptr)
 		*groups++ = &wireless_group;
 #endif
 #endif /* CONFIG_SYSFS */
 
-	if (dev_net(net) != &init_net)
+	if (!net_eq(dev_net(net), &init_net))
 		return 0;
 
 	return device_add(dev);

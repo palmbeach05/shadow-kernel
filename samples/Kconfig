@@ -7,12 +7,6 @@ menuconfig SAMPLES
 
 if SAMPLES
 
-config SAMPLE_MARKERS
-	tristate "Build markers examples -- loadable modules only"
-	depends on MARKERS && m
-	help
-	  This build markers example modules.
-
 config SAMPLE_TRACEPOINTS
 	tristate "Build tracepoints examples -- loadable modules only"
 	depends on TRACEPOINTS && m
@@ -45,6 +39,12 @@ config SAMPLE_KRETPROBES
 	tristate "Build kretprobes example -- loadable modules only"
 	default m
 	depends on SAMPLE_KPROBES && KRETPROBES
+
+config SAMPLE_HW_BREAKPOINT
+	tristate "Build kernel hardware breakpoint examples -- loadable module only"
+	depends on HAVE_HW_BREAKPOINT && m
+	help
+	  This builds kernel hardware breakpoint example modules.
 
 config SAMPLE_PSRWLOCK
 	tristate "Build psrwlock example -- loadable modules only"

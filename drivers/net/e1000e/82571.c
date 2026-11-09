@@ -1676,6 +1676,7 @@ static struct e1000_mac_operations e82571_mac_ops = {
 
 static struct e1000_phy_operations e82_phy_ops_igp = {
 	.acquire_phy		= e1000_get_hw_semaphore_82571,
+	.check_polarity		= e1000_check_polarity_igp,
 	.check_reset_block	= e1000e_check_reset_block_generic,
 	.commit_phy		= NULL,
 	.force_speed_duplex	= e1000e_phy_force_speed_duplex_igp,
@@ -1693,6 +1694,7 @@ static struct e1000_phy_operations e82_phy_ops_igp = {
 
 static struct e1000_phy_operations e82_phy_ops_m88 = {
 	.acquire_phy		= e1000_get_hw_semaphore_82571,
+	.check_polarity		= e1000_check_polarity_m88,
 	.check_reset_block	= e1000e_check_reset_block_generic,
 	.commit_phy		= e1000e_phy_sw_reset,
 	.force_speed_duplex	= e1000e_phy_force_speed_duplex_m88,
@@ -1710,6 +1712,7 @@ static struct e1000_phy_operations e82_phy_ops_m88 = {
 
 static struct e1000_phy_operations e82_phy_ops_bm = {
 	.acquire_phy		= e1000_get_hw_semaphore_82571,
+	.check_polarity		= e1000_check_polarity_m88,
 	.check_reset_block	= e1000e_check_reset_block_generic,
 	.commit_phy		= e1000e_phy_sw_reset,
 	.force_speed_duplex	= e1000e_phy_force_speed_duplex_m88,

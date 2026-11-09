@@ -368,8 +368,6 @@ static inline void mem_cgroup_uncharge_swap(swp_entry_t ent)
 }
 #endif
 
-extern void ltt_dump_swap_files(void *call_data);
-
 #else /* CONFIG_SWAP */
 
 #define nr_swap_pages				0L

@@ -800,6 +800,7 @@ config UID16
 
 config SYSCTL_SYSCALL
 	bool "Sysctl syscall support" if EMBEDDED
+	depends on PROC_SYSCTL
 	default y
 	select SYSCTL
 	---help---
@@ -1160,13 +1161,6 @@ config PROFILING
 config TRACEPOINTS
 	bool
 
-config MARKERS
-	bool "Activate markers"
-	select GENERIC_TRACER
-	help
-	  Place an empty function call at each marker site. Can be
-	  dynamically changed for a probe function.
-
 source "arch/Kconfig"
 
 config SLOW_WORK
@@ -1192,8 +1186,6 @@ config SLOW_WORK_DEBUG
 	  including items currently executing.
 
 	  See Documentation/slow-work.txt.
-
-source "ltt/Kconfig"
 
 config HAVE_IMMEDIATE
 	def_bool n

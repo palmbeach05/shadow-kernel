@@ -28,7 +28,6 @@
 #include <linux/regset.h>
 #include <linux/module.h>
 #include <linux/kallsyms.h>
-#include <linux/marker.h>
 #include <trace/syscall.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -42,28 +41,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
 
-DEFINE_TRACE(syscall_entry);
+DEFINE_TRACE(syscall_enter);
 DEFINE_TRACE(syscall_exit);
 
 extern unsigned long sys_call_table[];
-void ltt_dump_sys_call_table(void *call_data)
-{
-	int i;
-	char namebuf[KSYM_NAME_LEN];
-
-	for (i = 0; i < NR_syscalls; i++) {
-		sprint_symbol(namebuf, sys_call_table[i]);
-		__trace_mark(0, syscall_state, sys_call_table, call_data,
-			"id %d address %p symbol %s",
-			i, (void *)sys_call_table[i], namebuf);
-	}
-}
-EXPORT_SYMBOL_GPL(ltt_dump_sys_call_table);
-
-void ltt_dump_idt_table(void *call_data)
-{
-}
-EXPORT_SYMBOL_GPL(ltt_dump_idt_table);
 
 /*
  * This routine will get a word off of the process kernel stack.
@@ -479,7 +460,7 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 {
 	long ret = 0;
 
-	trace_syscall_entry(regs, regs->regs[3]);
+	trace_syscall_enter(regs, regs->regs[3]);
 
 	secure_computing(regs->regs[0]);
 

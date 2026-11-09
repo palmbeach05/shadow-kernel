@@ -61,7 +61,7 @@ void unreg_prof_syscall_exit(char *name);
 
 #endif
 
-DECLARE_TRACE(syscall_entry,
+DECLARE_TRACE(syscall_enter,
 	TP_PROTO(struct pt_regs *regs, long id),
 	TP_ARGS(regs, id));
 DECLARE_TRACE(syscall_exit,

@@ -23,7 +23,6 @@
 
  */
 
-#include <linux/autoconf.h>
 #include <linux/module.h>
 #include <linux/drbd.h>
 #include <linux/in.h>
@@ -34,7 +33,6 @@
 #include <linux/blkpg.h>
 #include <linux/cpumask.h>
 #include "drbd_int.h"
-#include "drbd_tracing.h"
 #include "drbd_wrappers.h"
 #include <asm/unaligned.h>
 #include <linux/drbd_tag_magic.h>
@@ -735,7 +733,7 @@ void drbd_setup_queue_param(struct drbd_conf *mdev, unsigned int max_seg_s) __mu
  */
 static void drbd_reconfig_start(struct drbd_conf *mdev)
 {
-	wait_event(mdev->state_wait, test_and_set_bit(CONFIG_PENDING, &mdev->flags));
+	wait_event(mdev->state_wait, !test_and_set_bit(CONFIG_PENDING, &mdev->flags));
 	wait_event(mdev->state_wait, !test_bit(DEVICE_DYING, &mdev->flags));
 	drbd_thread_start(&mdev->worker);
 }
@@ -896,11 +894,6 @@ static int drbd_nl_disk_conf(struct drbd_conf *mdev, struct drbd_nl_cfg_req *nlp
 		min_md_device_sectors = MD_RESERVED_SECT * (nbc->dc.meta_dev_idx + 1);
 	}
 
-	if (drbd_get_capacity(nbc->md_bdev) > max_possible_sectors)
-		dev_warn(DEV, "truncating very big lower level device "
-		     "to currently maximum possible %llu sectors\n",
-		     (unsigned long long) max_possible_sectors);
-
 	if (drbd_get_capacity(nbc->md_bdev) < min_md_device_sectors) {
 		retcode = ERR_MD_DISK_TO_SMALL;
 		dev_warn(DEV, "refusing attach: md-device too small, "
@@ -918,6 +911,15 @@ static int drbd_nl_disk_conf(struct drbd_conf *mdev, struct drbd_nl_cfg_req *nlp
 	}
 
 	nbc->known_size = drbd_get_capacity(nbc->backing_bdev);
+
+	if (nbc->known_size > max_possible_sectors) {
+		dev_warn(DEV, "==> truncating very big lower level device "
+			"to currently maximum possible %llu sectors <==\n",
+			(unsigned long long) max_possible_sectors);
+		if (nbc->dc.meta_dev_idx >= 0)
+			dev_warn(DEV, "==>> using internal or flexible "
+				      "meta data may help <<==\n");
+	}
 
 	drbd_suspend_io(mdev);
 	/* also wait for the last barrier ack. */
@@ -2002,7 +2004,7 @@ static struct cn_handler_struct cnd_table[] = {
 	[ P_new_c_uuid ]	= { &drbd_nl_new_c_uuid,	0 },
 };
 
-static void drbd_connector_callback(struct cn_msg *req)
+static void drbd_connector_callback(struct cn_msg *req, struct netlink_skb_parms *nsp)
 {
 	struct drbd_nl_cfg_req *nlp = (struct drbd_nl_cfg_req *)req->data;
 	struct cn_handler_struct *cm;
@@ -2019,13 +2021,16 @@ static void drbd_connector_callback(struct cn_msg *req)
 		return;
 	}
 
+	if (!cap_raised(nsp->eff_cap, CAP_SYS_ADMIN)) {
+		retcode = ERR_PERM;
+		goto fail;
+	}
+
 	mdev = ensure_mdev(nlp);
 	if (!mdev) {
 		retcode = ERR_MINOR_INVALID;
 		goto fail;
 	}
-
-	trace_drbd_netlink(req, 1);
 
 	if (nlp->packet_type >= P_nl_after_last_packet) {
 		retcode = ERR_PACKET_NR;
@@ -2064,7 +2069,6 @@ static void drbd_connector_callback(struct cn_msg *req)
 	cn_reply->len = sizeof(struct drbd_nl_cfg_reply) + rr;
 	cn_reply->flags = 0;
 
-	trace_drbd_netlink(cn_reply, 0);
 	rr = cn_netlink_send(cn_reply, CN_IDX_DRBD, GFP_KERNEL);
 	if (rr && rr != -ESRCH)
 		printk(KERN_INFO "drbd: cn_netlink_send()=%d\n", rr);
@@ -2158,7 +2162,6 @@ void drbd_bcast_state(struct drbd_conf *mdev, union drbd_state state)
 	reply->minor = mdev_to_minor(mdev);
 	reply->ret_code = NO_ERROR;
 
-	trace_drbd_netlink(cn_reply, 0);
 	cn_netlink_send(cn_reply, CN_IDX_DRBD, GFP_NOIO);
 }
 
@@ -2191,7 +2194,6 @@ void drbd_bcast_ev_helper(struct drbd_conf *mdev, char *helper_name)
 	reply->minor = mdev_to_minor(mdev);
 	reply->ret_code = NO_ERROR;
 
-	trace_drbd_netlink(cn_reply, 0);
 	cn_netlink_send(cn_reply, CN_IDX_DRBD, GFP_NOIO);
 }
 
@@ -2263,7 +2265,6 @@ void drbd_bcast_ee(struct drbd_conf *mdev,
 	reply->minor = mdev_to_minor(mdev);
 	reply->ret_code = NO_ERROR;
 
-	trace_drbd_netlink(cn_reply, 0);
 	cn_netlink_send(cn_reply, CN_IDX_DRBD, GFP_NOIO);
 	kfree(cn_reply);
 }
@@ -2303,7 +2304,6 @@ void drbd_bcast_sync_progress(struct drbd_conf *mdev)
 	reply->minor = mdev_to_minor(mdev);
 	reply->ret_code = NO_ERROR;
 
-	trace_drbd_netlink(cn_reply, 0);
 	cn_netlink_send(cn_reply, CN_IDX_DRBD, GFP_NOIO);
 }
 
@@ -2357,7 +2357,6 @@ void drbd_nl_send_reply(struct cn_msg *req, int ret_code)
 	reply->minor = ((struct drbd_nl_cfg_req *)req->data)->drbd_minor;
 	reply->ret_code = ret_code;
 
-	trace_drbd_netlink(cn_reply, 0);
 	rr = cn_netlink_send(cn_reply, CN_IDX_DRBD, GFP_NOIO);
 	if (rr && rr != -ESRCH)
 		printk(KERN_INFO "drbd: cn_netlink_send()=%d\n", rr);
